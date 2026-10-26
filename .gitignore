@@ -40,3 +40,43 @@ screenshots
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Python
+.venv/
+**/.venv/
+__pycache__/
+*.pyc
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+terraform.tfvars
+*.auto.tfvars
+
+# CloudTwin generated/private outputs
+cloudtwin-poc/outputs/current_state.json
+cloudtwin-poc/outputs/current_twin.html
+cloudtwin-baseline/
+terraform/eks/minimal/baseline-plan.json
+terraform/eks/minimal/baseline-plan.txt
+
+# Omar-local Codex instructions and temporary AWS experiments
+.agents/
+AGENTS.md
+aws-credits-lab-tmp/
+
+# Generated release bundle (source Compose files live under src/)
+/docker-compose.yaml
+
+# Temporary skill/install folders
+.grill-me-temp/
+.matt-skills-temp/
