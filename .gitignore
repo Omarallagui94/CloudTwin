@@ -65,6 +65,7 @@ terraform.tfvars
 # CloudTwin generated/private outputs
 cloudtwin-poc/outputs/current_state.json
 cloudtwin-poc/outputs/current_twin.html
+cloudtwin-poc/scenarios/**/evidence/
 cloudtwin-baseline/
 terraform/eks/minimal/baseline-plan.json
 terraform/eks/minimal/baseline-plan.txt

@@ -1,0 +1,11 @@
+{
+  "scenario_id": "S03",
+  "expected_changed_resource": "k8s:service:default:ui",
+  "expected_property_change": {
+    "property": "service_type_and_scheme",
+    "before": {"service_type": "ClusterIP", "scheme": "internal"},
+    "after": {"service_type": "LoadBalancer", "scheme": "internet-facing"}
+  },
+  "structurally_involved_resources": ["k8s:deployment:default:ui", "aws:internet", "aws:load-balancer:fixture-ui-public"],
+  "expected_direction": {"exposure": "increase", "availability": "unchanged"}
+}

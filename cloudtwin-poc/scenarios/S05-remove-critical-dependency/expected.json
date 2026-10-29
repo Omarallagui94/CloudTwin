@@ -1,0 +1,11 @@
+{
+  "scenario_id": "S05",
+  "expected_changed_resource": "k8s:service:default:orders-postgresql",
+  "expected_property_change": {"property": "resource", "before": "present", "after": "absent"},
+  "structurally_involved_resources": [
+    "k8s:deployment:default:orders",
+    "k8s:service:default:orders",
+    "k8s:statefulset:default:orders-postgresql"
+  ],
+  "expected_direction": {"exposure": "unchanged", "availability": "decrease"}
+}
