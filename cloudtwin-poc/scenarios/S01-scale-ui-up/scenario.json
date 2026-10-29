@@ -1,0 +1,11 @@
+{
+  "scenario_id": "S01",
+  "name": "Scale UI up",
+  "description": "Increase the UI Deployment from one replica to three replicas.",
+  "target_resource": "k8s:deployment:default:ui",
+  "resource_type": "DEPLOYMENT",
+  "operation": "update",
+  "property": "replicas",
+  "before": 1,
+  "after": 3
+}

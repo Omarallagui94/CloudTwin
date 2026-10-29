@@ -2,6 +2,7 @@ boto3>=1.34,<2
 kubernetes>=30,<35
 networkx>=3.2,<4
 pyvis>=0.3.2,<1
+PyYAML>=6,<7
 streamlit>=1.40,<2
 pydantic>=2,<3
 pytest>=8

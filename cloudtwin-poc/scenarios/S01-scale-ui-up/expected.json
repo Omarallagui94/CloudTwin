@@ -1,0 +1,7 @@
+{
+  "scenario_id": "S01",
+  "expected_changed_resource": "k8s:deployment:default:ui",
+  "expected_property_change": {"property": "replicas", "before": 1, "after": 3},
+  "structurally_involved_resources": ["k8s:service:default:ui"],
+  "expected_direction": {"exposure": "unchanged", "availability": "increase"}
+}

@@ -1,0 +1,11 @@
+{
+  "scenario_id": "S02",
+  "name": "Scale UI down",
+  "description": "Reduce the UI Deployment from three replicas to one replica.",
+  "target_resource": "k8s:deployment:default:ui",
+  "resource_type": "DEPLOYMENT",
+  "operation": "update",
+  "property": "replicas",
+  "before": 3,
+  "after": 1
+}

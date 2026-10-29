@@ -1,0 +1,11 @@
+{
+  "metadata": {"fixture": true, "schema": "cloudtwin-current-twin-v1", "source": "sanitized-local"},
+  "resources": [
+    {"id": "k8s:deployment:default:ui", "name": "ui", "type": "DEPLOYMENT", "provider": "kubernetes", "properties": {"namespace": "default", "replicas": 1, "ready_replicas": 1}},
+    {"id": "k8s:service:default:ui", "name": "ui", "type": "SERVICE", "provider": "kubernetes", "properties": {"namespace": "default", "service_type": "ClusterIP"}}
+  ],
+  "relationships": [
+    {"source": "k8s:service:default:ui", "target": "k8s:deployment:default:ui", "type": "EXPOSES"}
+  ],
+  "summary": {"aws_resources": 0, "kubernetes_resources": 2, "relationships": 1}
+}
