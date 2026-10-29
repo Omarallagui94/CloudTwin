@@ -2,7 +2,7 @@
 
 Le dépôt contient aujourd'hui :
   - cloudtwin-poc/outputs/current_state.json   (sortie du normalizer)
-  - cloudtwin-poc/scenarios/scenario-01.json   (format simple, pas encore de `changes`)
+  - un scÃ©nario temporaire au format PoC simple (pas encore de `changes` canoniques)
 
 Ce module construit un AnalysisContext à partir de ces deux fichiers pour pouvoir
 tester le moteur de bout en bout dès maintenant. Il sera REMPLACÉ par la sortie
@@ -40,6 +40,9 @@ def _find_resource(twin: Twin, resource_type: str, name: str, namespace: str | N
     return matches[0].id
 
 
+# TEMPORARY, NON-CANONICAL: this one-hop neighbour list exists only for Fatma's
+# current PoC tests. It is not Hamdi's dependency/affected-resource output and is
+# not a blast-radius calculation. Replace it when Hamdi's canonical output lands.
 def _neighbours(twin: Twin, change_id: str, rid: str) -> list[AffectedResource]:
     """Voisins à distance 1 (approximation ; le vrai calcul est la tâche H7 de Hamdi)."""
     result = []

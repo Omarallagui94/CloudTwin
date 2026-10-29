@@ -14,15 +14,22 @@ from botocore.exceptions import BotoCoreError, ClientError
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 
+from analysis.adapters import context_from_poc
+from analysis.engine import run as run_analysis
 from discovery.aws_collector import AWSCollector
 from discovery.kubernetes_collector import KubernetesCollector
 from discovery.normalizer import normalize
+from integration.scenario_compat import (
+    CompatibilityError,
+    discover_scenarios,
+    to_fatma_poc_scenario,
+)
 from visualization.build_graph import main as build_graph
 
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "outputs" / "current_state.json"
 GRAPH_PATH = ROOT / "outputs" / "current_twin.html"
-SCENARIO_PATH = ROOT / "scenarios" / "scenario-01.json"
+SCENARIOS_PATH = ROOT / "scenarios"
 
 
 def configure_page() -> None:
@@ -190,28 +197,82 @@ def render_graph() -> None:
 
 def render_scenario(twin: dict[str, Any] | None) -> None:
     st.subheader("Proposed Change")
-    scenario = load_json(SCENARIO_PATH)
-    if not scenario:
-        st.warning("The proposed scenario file is unavailable.")
+    try:
+        scenarios = discover_scenarios(SCENARIOS_PATH)
+    except CompatibilityError as exc:
+        st.warning(f"The scenario pack is unavailable: {exc}")
         return
-    current = scenario["change"]["before"]
+    if not scenarios:
+        st.warning("No scenarios were found in the scenario pack.")
+        return
+
+    selected_id = st.selectbox(
+        "Scenario",
+        options=list(scenarios),
+        format_func=lambda scenario_id: f"{scenario_id} — {scenarios[scenario_id]['name']}",
+    )
+    scenario = scenarios[selected_id]
+    current = scenario["before"]
     if twin:
-        ui = next(
-            (resource for resource in twin["resources"] if resource["type"] == "DEPLOYMENT"
-             and resource["name"] == scenario["resource"]
-             and resource["properties"].get("namespace") == "default"),
+        target = next(
+            (resource for resource in twin["resources"]
+             if resource["id"] == scenario["target_resource"]),
             None,
         )
-        if ui:
-            current = ui["properties"].get("replicas", current)
-    proposed = scenario["change"]["after"]
+        if target:
+            current = target["properties"].get(scenario["property"], current)
+    proposed = scenario["after"]
+    property_label = scenario["property"].replace("_", " ").title()
+    display = lambda value: json.dumps(value, sort_keys=True) if isinstance(value, (dict, list)) else str(value)
     st.markdown(
         f'<div class="proposal"><b>{scenario["name"]}</b><br><br>'
-        f'UI replicas &nbsp; Current: <b>{current}</b> &nbsp; Proposed: <b>{proposed}</b></div>',
+        f'{property_label} &nbsp; Current: <b>{display(current)}</b> &nbsp; '
+        f'Proposed: <b>{display(proposed)}</b></div>',
         unsafe_allow_html=True,
     )
     st.write("")
     st.button("Simulate Change — Next Phase", disabled=True, use_container_width=True)
+    render_local_analysis(selected_id, scenario)
+
+
+def render_local_analysis(scenario_id: str, scenario: dict[str, Any]) -> None:
+    """Render temporary S01/S02 fixture results without implying canonical output."""
+    st.subheader("Local Analysis PoC")
+    if scenario_id not in {"S01", "S02"}:
+        st.info("The temporary local analysis integration is validated for S01 and S02 only.")
+        return
+
+    fixture_paths = list(SCENARIOS_PATH.glob(f"{scenario_id}-*/current-twin.json"))
+    fixture_twin = load_json(fixture_paths[0]) if len(fixture_paths) == 1 else None
+    if fixture_twin is None:
+        st.warning(f"The Local Fixture Mode Current Twin for {scenario_id} is unavailable.")
+        return
+
+    try:
+        context = context_from_poc(fixture_twin, to_fatma_poc_scenario(scenario))
+        result = run_analysis(context)
+    except (CompatibilityError, ValueError, KeyError) as exc:
+        st.warning(f"Temporary analysis compatibility failed: {exc}")
+        return
+
+    for finding in result.findings:
+        severity = finding.severity.value.upper()
+        if finding.status.value == "fail":
+            st.error(f"ACTIVE {severity}-SEVERITY FINDING — {finding.title}")
+            st.write(finding.description)
+            if finding.affected_resource_ids:
+                st.caption(
+                    "Affected-resource IDs below come from Fatma's temporary one-hop PoC "
+                    "approximation; they are not Hamdi's canonical dependency analysis."
+                )
+                st.code("\n".join(finding.affected_resource_ids))
+        elif finding.status.value == "pass":
+            st.success("PASS — no active resilience finding")
+            st.write(finding.description)
+            st.caption(f"Potential rule severity if it fails: {severity}")
+        else:
+            st.warning(f"NOT EVALUATED — {finding.title}")
+            st.caption(f"Potential rule severity if it fails: {severity}")
 
 
 def main() -> None:
