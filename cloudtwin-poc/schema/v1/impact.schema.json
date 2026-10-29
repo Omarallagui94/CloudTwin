@@ -1,0 +1,28 @@
+
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudtwin.dev/schema/v1/impact.schema.json",
+  "title": "CloudTwin Impact",
+  "type": "object",
+  "required": ["schema_version", "scenario_id", "impacts"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "scenario_id": { "type": "string", "minLength": 1 },
+    "impacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["resource_id", "impact_type", "reason"],
+        "properties": {
+          "resource_id": { "type": "string", "minLength": 1 },
+          "impact_type": {
+            "enum": ["DIRECT", "INDIRECT", "RISK"]
+          },
+          "reason": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

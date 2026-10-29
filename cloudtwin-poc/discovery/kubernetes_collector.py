@@ -1,9 +1,7 @@
 """Read-only Kubernetes discovery using the active local kubeconfig context."""
 
 from __future__ import annotations
-
 from typing import Any, Callable
-
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 
@@ -39,22 +37,35 @@ class KubernetesCollector:
             self.warnings.append(f"{label}: Kubernetes API returned {exc.status} {exc.reason}")
             return []
 
+    def _list_all(self, operation: Callable[..., Any], **kwargs: Any) -> list[Any]:
+        """Fetch every page from a Kubernetes list endpoint using continuation tokens."""
+        items: list[Any] = []
+        continue_token = None
+        while True:
+            response = operation(limit=500, _continue=continue_token, **kwargs)
+            items.extend(response.items or [])
+            metadata = getattr(response, "metadata", None)
+            continue_token = getattr(metadata, "_continue", None) if metadata else None
+            if not continue_token:
+                return items
+
     def collect_namespaces(self) -> list[dict[str, Any]]:
         return self._safe("Namespace discovery", lambda: [{
             "name": x.metadata.name, "uid": x.metadata.uid, "labels": _labels(x.metadata),
             "phase": x.status.phase,
-        } for x in self.core.list_namespace().items])
+        } for x in self._list_all(self.core.list_namespace)])
 
     def collect_nodes(self) -> list[dict[str, Any]]:
         def operation() -> list[dict[str, Any]]:
             result = []
-            for x in self.core.list_node().items:
+            for x in self._list_all(self.core.list_node):
                 info = x.status.node_info
                 addresses = {a.type: a.address for a in x.status.addresses or []}
                 result.append({
                     "name": x.metadata.name, "uid": x.metadata.uid, "labels": _labels(x.metadata),
                     "provider_id": x.spec.provider_id, "pod_cidr": x.spec.pod_cidr,
-                    "internal_ip": addresses.get("InternalIP"), "instance_type": _labels(x.metadata).get("node.kubernetes.io/instance-type"),
+                    "internal_ip": addresses.get("InternalIP"),
+                    "instance_type": _labels(x.metadata).get("node.kubernetes.io/instance-type"),
                     "availability_zone": _labels(x.metadata).get("topology.kubernetes.io/zone"),
                     "kubelet_version": info.kubelet_version if info else None,
                 })
@@ -68,7 +79,7 @@ class KubernetesCollector:
             "replicas": x.spec.replicas, "ready_replicas": x.status.ready_replicas or 0,
             "service_account": x.spec.template.spec.service_account_name or "default",
             "images": [c.image for c in x.spec.template.spec.containers],
-        } for x in self.apps.list_deployment_for_all_namespaces().items])
+        } for x in self._list_all(self.apps.list_deployment_for_all_namespaces)])
 
     def collect_pods(self) -> list[dict[str, Any]]:
         return self._safe("Pod discovery", lambda: [{
@@ -76,19 +87,20 @@ class KubernetesCollector:
             "labels": _labels(x.metadata), "owner": _owner(x.metadata), "node_name": x.spec.node_name,
             "service_account": x.spec.service_account_name or "default", "phase": x.status.phase,
             "pod_ip": x.status.pod_ip, "images": [c.image for c in x.spec.containers],
-        } for x in self.core.list_pod_for_all_namespaces().items])
+        } for x in self._list_all(self.core.list_pod_for_all_namespaces)])
 
     def collect_services(self) -> list[dict[str, Any]]:
         def operation() -> list[dict[str, Any]]:
             result = []
-            for x in self.core.list_service_for_all_namespaces().items:
+            for x in self._list_all(self.core.list_service_for_all_namespaces):
                 ingress = x.status.load_balancer.ingress or [] if x.status.load_balancer else []
                 result.append({
                     "name": x.metadata.name, "namespace": x.metadata.namespace, "uid": x.metadata.uid,
                     "labels": _labels(x.metadata), "annotations": x.metadata.annotations or {},
                     "selector": x.spec.selector or {}, "service_type": x.spec.type,
                     "cluster_ip": x.spec.cluster_ip,
-                    "ports": [{"name": p.name, "port": p.port, "target_port": str(p.target_port), "protocol": p.protocol} for p in x.spec.ports or []],
+                    "ports": [{"name": p.name, "port": p.port, "target_port": str(p.target_port),
+                               "protocol": p.protocol} for p in x.spec.ports or []],
                     "external_endpoints": [i.hostname or i.ip for i in ingress if i.hostname or i.ip],
                 })
             return result
@@ -102,18 +114,18 @@ class KubernetesCollector:
             "service_name": x.spec.service_name,
             "service_account": x.spec.template.spec.service_account_name or "default",
             "images": [c.image for c in x.spec.template.spec.containers],
-        } for x in self.apps.list_stateful_set_for_all_namespaces().items])
+        } for x in self._list_all(self.apps.list_stateful_set_for_all_namespaces)])
 
     def collect_service_accounts(self) -> list[dict[str, Any]]:
         return self._safe("ServiceAccount discovery", lambda: [{
             "name": x.metadata.name, "namespace": x.metadata.namespace, "uid": x.metadata.uid,
             "labels": _labels(x.metadata), "annotations": x.metadata.annotations or {},
-        } for x in self.core.list_service_account_for_all_namespaces().items])
+        } for x in self._list_all(self.core.list_service_account_for_all_namespaces)])
 
     def collect_ingresses(self) -> list[dict[str, Any]]:
         def operation() -> list[dict[str, Any]]:
             result = []
-            for x in self.networking.list_ingress_for_all_namespaces().items:
+            for x in self._list_all(self.networking.list_ingress_for_all_namespaces):
                 backends = []
                 if x.spec.default_backend and x.spec.default_backend.service:
                     backends.append(x.spec.default_backend.service.name)
@@ -121,18 +133,29 @@ class KubernetesCollector:
                     for path in rule.http.paths if rule.http else []:
                         if path.backend.service:
                             backends.append(path.backend.service.name)
-                result.append({"name": x.metadata.name, "namespace": x.metadata.namespace, "uid": x.metadata.uid,
-                               "labels": _labels(x.metadata), "class_name": x.spec.ingress_class_name,
-                               "hosts": [r.host for r in x.spec.rules or [] if r.host], "backend_services": sorted(set(backends))})
+                result.append({
+                    "name": x.metadata.name, "namespace": x.metadata.namespace, "uid": x.metadata.uid,
+                    "labels": _labels(x.metadata), "class_name": x.spec.ingress_class_name,
+                    "hosts": [r.host for r in x.spec.rules or [] if r.host],
+                    "backend_services": sorted(set(backends)),
+                })
             return result
         return self._safe("Ingress discovery", operation)
 
     def collect_network_policies(self) -> list[dict[str, Any]]:
-        return self._safe("NetworkPolicy discovery", lambda: [{
-            "name": x.metadata.name, "namespace": x.metadata.namespace, "uid": x.metadata.uid,
-            "labels": _labels(x.metadata), "pod_selector": _selector(x.spec.pod_selector),
-            "policy_types": x.spec.policy_types or [],
-        } for x in self.networking.list_network_policy_for_all_namespaces().items])
+        def operation() -> list[dict[str, Any]]:
+            result = []
+            for item in self._list_all(self.networking.list_network_policy_for_all_namespaces):
+                result.append({
+                    "name": item.metadata.name, "namespace": item.metadata.namespace,
+                    "uid": item.metadata.uid, "labels": _labels(item.metadata),
+                    "pod_selector": _selector(item.spec.pod_selector),
+                    "policy_types": item.spec.policy_types or [],
+                    "ingress_rules": client.ApiClient().sanitize_for_serialization(item.spec.ingress or []),
+                    "egress_rules": client.ApiClient().sanitize_for_serialization(item.spec.egress or []),
+                })
+            return result
+        return self._safe("NetworkPolicy discovery", operation)
 
     def collect(self) -> dict[str, Any]:
         return {

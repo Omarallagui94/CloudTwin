@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudtwin.dev/schema/v1/scenario.schema.json",
+  "title": "CloudTwin Scenario",
+  "description": "A proposed infrastructure change that has not yet been applied. Consumed by the Future Twin engine to produce a virtual future state for comparison with the Current Twin.",
+  "type": "object",
+  "required": ["schema_version", "scenario_id", "name", "resource_type", "resource", "change"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0",
+      "description": "Schema version. Must be '1.0.0' for this revision."
+    },
+    "scenario_id": {
+      "type": "string",
+      "pattern": "^S[0-9]{2,}$",
+      "description": "Unique scenario identifier. Convention: S01, S02, ...",
+      "examples": ["S01", "S02"]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable title describing the proposed change.",
+      "examples": ["Increase UI replicas"]
+    },
+    "resource_type": {
+      "type": "string",
+      "description": "Kubernetes or AWS resource kind targeted by this scenario.",
+      "examples": ["Deployment", "Service", "StatefulSet"]
+    },
+    "resource": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Name of the targeted resource (matches the 'name' field in the Twin).",
+      "examples": ["ui"]
+    },
+    "namespace": {
+      "type": "string",
+      "description": "Kubernetes namespace of the targeted resource. Optional; defaults to 'default' when omitted.",
+      "examples": ["default"]
+    },
+    "change": {
+      "$ref": "#/$defs/Change"
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional longer explanation of the change rationale."
+    }
+  },
+  "$defs": {
+    "Change": {
+      "type": "object",
+      "required": ["property", "before", "after"],
+      "additionalProperties": false,
+      "description": "The specific property mutation proposed by this scenario.",
+      "properties": {
+        "property": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the resource property being changed.",
+          "examples": ["replicas", "instance_type", "desired_size"]
+        },
+        "before": {
+          "description": "Current (expected) value of the property. Used for conflict detection.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" },
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "after": {
+          "description": "Proposed new value of the property.",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" },
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

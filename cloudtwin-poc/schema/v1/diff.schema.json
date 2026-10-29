@@ -1,0 +1,29 @@
+
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudtwin.dev/schema/v1/diff.schema.json",
+  "title": "CloudTwin Diff",
+  "type": "object",
+  "required": ["schema_version", "changes"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["resource_id", "change_type"],
+        "properties": {
+          "resource_id": { "type": "string", "minLength": 1 },
+          "change_type": {
+            "enum": ["ADDED", "REMOVED", "MODIFIED"]
+          },
+          "property": { "type": "string" },
+          "before": {},
+          "after": {}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

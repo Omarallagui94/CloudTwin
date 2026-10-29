@@ -64,19 +64,32 @@ class AWSCollector:
             return result
         return self._safe("Subnet discovery", operation)
 
+
     def collect_security_groups(self) -> list[dict[str, Any]]:
         def operation() -> list[dict[str, Any]]:
             result = []
-            for item in self.ec2.get_paginator("describe_security_groups").paginate().search("SecurityGroups[]"):
+            paginator = self.ec2.get_paginator("describe_security_groups")
+
+            for item in paginator.paginate().search("SecurityGroups[]"):
+                ingress = item.get("IpPermissions", [])
+                egress = item.get("IpPermissionsEgress", [])
+
                 result.append({
-                    "group_id": item["GroupId"], "name": item.get("GroupName"),
-                    "description": item.get("Description"), "vpc_id": item.get("VpcId"),
-                    "ingress_rule_count": len(item.get("IpPermissions", [])),
-                    "egress_rule_count": len(item.get("IpPermissionsEgress", [])),
+                    "group_id": item["GroupId"],
+                    "name": item.get("GroupName"),
+                    "description": item.get("Description"),
+                    "vpc_id": item.get("VpcId"),
+                    "ingress_rule_count": len(ingress),
+                    "egress_rule_count": len(egress),
+                    "ingress_rules": ingress,
+                    "egress_rules": egress,
                     "tags": self._tags(item.get("Tags")),
                 })
+
             return result
+
         return self._safe("Security Group discovery", operation)
+
 
     def collect_instances(self) -> list[dict[str, Any]]:
         def operation() -> list[dict[str, Any]]:
@@ -157,16 +170,93 @@ class AWSCollector:
             return result
         return self._safe("Load Balancer discovery", operation)
 
+
     def collect_roles(self) -> list[dict[str, Any]]:
         def operation() -> list[dict[str, Any]]:
             result = []
-            for role in self.iam.get_paginator("list_roles").paginate().search("Roles[]"):
-                result.append({
-                    "name": role["RoleName"], "arn": role["Arn"], "path": role.get("Path"),
-                    "description": role.get("Description"), "max_session_duration": role.get("MaxSessionDuration"),
-                })
+            paginator = self.iam.get_paginator("list_roles")
+
+            for role in paginator.paginate().search("Roles[]"):
+                role_data = {
+                    "name": role["RoleName"],
+                    "arn": role["Arn"],
+                    "path": role.get("Path"),
+                    "description": role.get("Description"),
+                    "max_session_duration": role.get("MaxSessionDuration"),
+                    "attached_policies": [],
+                    "inline_policies": [],
+                }
+
+                role_name = role["RoleName"]
+
+                # Attached managed policies
+                try:
+                    attached_paginator = self.iam.get_paginator(
+                        "list_attached_role_policies"
+                    )
+                    for policy in attached_paginator.paginate(
+                        RoleName=role_name
+                    ).search("AttachedPolicies[]"):
+                        policy_data = {
+                            "name": policy["PolicyName"],
+                            "arn": policy["PolicyArn"],
+                        }
+
+                        try:
+                            details = self.iam.get_policy(
+                                PolicyArn=policy["PolicyArn"]
+                            )["Policy"]
+                            version_id = details["DefaultVersionId"]
+                            version = self.iam.get_policy_version(
+                                PolicyArn=policy["PolicyArn"],
+                                VersionId=version_id,
+                            )["PolicyVersion"]
+                            policy_data["document"] = version.get(
+                                "Document", {}
+                            )
+                        except (ClientError, BotoCoreError, KeyError) as exc:
+                            self.warnings.append(
+                                f"IAM managed policy {policy['PolicyArn']}: {exc}"
+                            )
+
+                        role_data["attached_policies"].append(policy_data)
+
+                except (ClientError, BotoCoreError) as exc:
+                    self.warnings.append(
+                        f"IAM attached policies for role {role_name}: {exc}"
+                    )
+
+                # Inline policies
+                try:
+                    inline_paginator = self.iam.get_paginator("list_role_policies")
+                    for policy_name in inline_paginator.paginate(
+                        RoleName=role_name
+                    ).search("PolicyNames[]"):
+                        policy_data = {"name": policy_name}
+
+                        try:
+                            policy_data["document"] = self.iam.get_role_policy(
+                                RoleName=role_name,
+                                PolicyName=policy_name,
+                            ).get("PolicyDocument", {})
+                        except (ClientError, BotoCoreError) as exc:
+                            self.warnings.append(
+                                f"IAM inline policy {role_name}/{policy_name}: {exc}"
+                            )
+
+                        role_data["inline_policies"].append(policy_data)
+
+                except (ClientError, BotoCoreError) as exc:
+                    self.warnings.append(
+                        f"IAM inline policies for role {role_name}: {exc}"
+                    )
+
+                result.append(role_data)
+
             return result
+
         return self._safe("IAM role discovery", operation)
+
 
     def collect(self) -> dict[str, Any]:
         clusters = self.collect_clusters()

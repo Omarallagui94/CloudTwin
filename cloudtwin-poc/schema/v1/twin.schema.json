@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudtwin.dev/schema/v1/twin.schema.json",
+  "title": "CloudTwin Current Twin",
+  "description": "Versioned schema for the CloudTwin normalized infrastructure snapshot. Produced by the normalizer from AWS and Kubernetes collector outputs. Consumed by the dashboard, graph builder, Future Twin engine, and diff/impact tools.",
+  "type": "object",
+  "required": ["schema_version", "metadata", "resources", "relationships", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0",
+      "description": "Schema version. Must be '1.0.0' for this revision."
+    },
+    "metadata": { "$ref": "#/$defs/Metadata" },
+    "resources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Resource" },
+      "description": "All discovered infrastructure resources, both AWS and Kubernetes."
+    },
+    "relationships": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/Relationship" },
+      "description": "Directed edges between resources."
+    },
+    "summary": { "$ref": "#/$defs/Summary" },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Non-fatal warnings collected during discovery. Optional; omitted when empty."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp of when this snapshot was generated. Optional."
+    }
+  },
+  "$defs": {
+    "Metadata": {
+      "type": "object",
+      "required": ["provider", "region", "cluster"],
+      "additionalProperties": false,
+      "description": "Snapshot-level metadata identifying the discovered environment.",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "Cloud provider name (display form).",
+          "examples": ["AWS"]
+        },
+        "region": {
+          "type": "string",
+          "description": "Cloud provider region.",
+          "examples": ["eu-west-3"]
+        },
+        "cluster": {
+          "type": "string",
+          "description": "Kubernetes cluster name.",
+          "examples": ["retail-store"]
+        }
+      }
+    },
+
+    "ResourceType": {
+      "type": "string",
+      "enum": [
+        "INTERNET",
+        "VPC",
+        "SUBNET",
+        "SECURITY_GROUP",
+        "EC2_INSTANCE",
+        "EKS_CLUSTER",
+        "EKS_NODE_GROUP",
+        "LOAD_BALANCER",
+        "IAM_ROLE",
+        "NAMESPACE",
+        "NODE",
+        "DEPLOYMENT",
+        "POD",
+        "SERVICE",
+        "STATEFUL_SET",
+        "SERVICE_ACCOUNT",
+        "INGRESS",
+        "NETWORK_POLICY"
+      ],
+      "description": "Closed set of recognized resource types. AWS types: INTERNET through IAM_ROLE. Kubernetes types: NAMESPACE through NETWORK_POLICY."
+    },
+
+    "Provider": {
+      "type": "string",
+      "enum": ["aws", "kubernetes"],
+      "description": "Infrastructure provider that owns the resource."
+    },
+
+    "ResourceId": {
+      "type": "string",
+      "pattern": "^(aws:internet|(?:aws|k8s):[a-z][a-z0-9-]*:.+)$",      "description": "Globally unique resource identifier. Format: '<provider-prefix>:<kind-slug>:<qualifier>'. AWS prefix is 'aws', Kubernetes prefix is 'k8s'. See the schema README for the full ID catalogue.",
+      "examples": [
+        "aws:vpc:vpc-0aaa1111bbbb2222c",
+        "aws:eks:retail-store",
+        "aws:eks-nodegroup:retail-store:retail-store-nodes",
+        "aws:ec2:i-0aaa1111dddd0001a",
+        "aws:subnet:subnet-0aaa1111aaaa0001a",
+        "aws:security-group:sg-0aaa1111cccc0001a",
+        "aws:load-balancer:fixture-retail-store-nlb",
+        "aws:iam-role:fixture-retail-store-cluster-role",
+        "aws:internet",
+        "k8s:namespace:default",
+        "k8s:node:ip-10-0-10-51.eu-west-3.compute.internal",
+        "k8s:deployment:default:ui",
+        "k8s:pod:default:ui-6d4c8f7b9-abcde",
+        "k8s:service:default:ui",
+        "k8s:service-account:default:ui",
+        "k8s:ingress:default:my-ingress",
+        "k8s:network-policy:default:my-policy"
+      ]
+    },
+
+    "Resource": {
+      "type": "object",
+      "required": ["id", "name", "type", "provider", "properties"],
+      "additionalProperties": false,
+      "description": "A single discovered infrastructure resource.",
+      "properties": {
+        "id": { "$ref": "#/$defs/ResourceId" },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable display name. Derived from tags (Name tag) or the native identifier."
+        },
+        "type": { "$ref": "#/$defs/ResourceType" },
+        "provider": { "$ref": "#/$defs/Provider" },
+        "properties": {
+          "type": "object",
+          "description": "Provider-specific properties. Contents vary by resource type; see schema README for per-type property catalogues."
+        }
+      }
+    },
+
+    "RelationshipType": {
+      "type": "string",
+      "enum": [
+        "CONTAINS",
+        "LOCATED_IN",
+        "USES",
+        "MEMBER_OF",
+        "RUNS_ON",
+        "SELECTS",
+        "EXPOSES",
+        "ROUTES_TO"
+      ],
+      "description": "Closed set of recognized directed relationship types."
+    },
+
+    "Relationship": {
+      "type": "object",
+      "required": ["source", "target", "type"],
+      "additionalProperties": false,
+      "description": "A directed edge from source resource to target resource.",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/ResourceId",
+          "description": "ID of the source (origin) resource."
+        },
+        "target": {
+          "$ref": "#/$defs/ResourceId",
+          "description": "ID of the target (destination) resource."
+        },
+        "type": { "$ref": "#/$defs/RelationshipType" }
+      }
+    },
+
+    "Summary": {
+      "type": "object",
+      "required": ["aws_resources", "kubernetes_resources", "relationships"],
+      "additionalProperties": false,
+      "description": "Aggregate counts for quick inspection.",
+      "properties": {
+        "aws_resources": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of resources where provider == 'aws'."
+        },
+        "kubernetes_resources": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of resources where provider == 'kubernetes'."
+        },
+        "relationships": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of relationships."
+        }
+      }
+    }
+  }
+}

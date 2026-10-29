@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudtwin.dev/schema/v1/changeset.schema.json",
+  "title": "CloudTwin normalized ChangeSet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source_kind", "metadata", "changes"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "source_kind": {"enum": ["scenario", "terraform_plan", "kubernetes_manifest"]},
+    "metadata": {"type": "object"},
+    "changes": {"type": "array", "items": {"$ref": "#/$defs/change"}}
+  },
+  "$defs": {
+    "change": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["change_id", "operation", "resource_id", "resource_type", "provider", "property_path", "before", "after", "source"],
+      "properties": {
+        "change_id": {"type": "string", "minLength": 1},
+        "operation": {"enum": ["create", "update", "delete", "replace"]},
+        "resource_id": {"type": "string", "pattern": "^(aws:internet|(?:aws|k8s):[a-z][a-z0-9-]*:.+)$"},
+        "resource_type": {"type": "string", "minLength": 1},
+        "provider": {"enum": ["aws", "kubernetes"]},
+        "property_path": {"type": ["string", "null"]},
+        "before": {},
+        "after": {},
+        "source": {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {"kind": {"type": "string"}, "reference": {"type": ["string", "null"]}},
+          "additionalProperties": true
+        },
+        "namespace": {"type": ["string", "null"]}
+      }
+    }
+  }
+}
