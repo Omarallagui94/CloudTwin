@@ -1,0 +1,819 @@
+{
+  "schema_version": "1.0",
+  "simulation_id": "sim-res001-neg",
+  "current_twin": {
+    "metadata": {
+      "provider": "AWS",
+      "region": "eu-west-3",
+      "cluster": "retail-store"
+    },
+    "resources": [
+      {
+        "id": "aws:vpc:vpc-0a1",
+        "name": "retail-store",
+        "type": "VPC",
+        "provider": "aws",
+        "properties": {
+          "vpc_id": "vpc-0a1",
+          "cidr": "10.0.0.0/16",
+          "state": "available",
+          "is_default": false,
+          "tags": {
+            "Name": "retail-store"
+          }
+        }
+      },
+      {
+        "id": "aws:subnet:subnet-00",
+        "name": "subnet-00",
+        "type": "SUBNET",
+        "provider": "aws",
+        "properties": {
+          "subnet_id": "subnet-00",
+          "vpc_id": "vpc-0a1",
+          "cidr": "10.0.0.0/24",
+          "availability_zone": "eu-west-3a",
+          "map_public_ip": true,
+          "tags": {}
+        }
+      },
+      {
+        "id": "aws:subnet:subnet-01",
+        "name": "subnet-01",
+        "type": "SUBNET",
+        "provider": "aws",
+        "properties": {
+          "subnet_id": "subnet-01",
+          "vpc_id": "vpc-0a1",
+          "cidr": "10.0.1.0/24",
+          "availability_zone": "eu-west-3b",
+          "map_public_ip": true,
+          "tags": {}
+        }
+      },
+      {
+        "id": "aws:subnet:subnet-02",
+        "name": "subnet-02",
+        "type": "SUBNET",
+        "provider": "aws",
+        "properties": {
+          "subnet_id": "subnet-02",
+          "vpc_id": "vpc-0a1",
+          "cidr": "10.0.2.0/24",
+          "availability_zone": "eu-west-3a",
+          "map_public_ip": false,
+          "tags": {}
+        }
+      },
+      {
+        "id": "aws:subnet:subnet-03",
+        "name": "subnet-03",
+        "type": "SUBNET",
+        "provider": "aws",
+        "properties": {
+          "subnet_id": "subnet-03",
+          "vpc_id": "vpc-0a1",
+          "cidr": "10.0.3.0/24",
+          "availability_zone": "eu-west-3b",
+          "map_public_ip": false,
+          "tags": {}
+        }
+      },
+      {
+        "id": "aws:security-group:sg-0node",
+        "name": "eks-node",
+        "type": "SECURITY_GROUP",
+        "provider": "aws",
+        "properties": {
+          "group_id": "sg-0node",
+          "name": "eks-node",
+          "description": "nodes",
+          "vpc_id": "vpc-0a1",
+          "ingress_rule_count": 2,
+          "egress_rule_count": 1,
+          "tags": {}
+        }
+      },
+      {
+        "id": "aws:ec2:i-0node1",
+        "name": "i-0node1",
+        "type": "EC2_INSTANCE",
+        "provider": "aws",
+        "properties": {
+          "instance_id": "i-0node1",
+          "instance_type": "t3.medium",
+          "state": "running",
+          "vpc_id": "vpc-0a1",
+          "subnet_id": "subnet-02",
+          "private_ip": "10.0.2.10",
+          "availability_zone": "eu-west-3a",
+          "security_group_ids": [
+            "sg-0node"
+          ],
+          "iam_instance_profile_arn": null,
+          "tags": {
+            "eks:nodegroup-name": "default"
+          }
+        }
+      },
+      {
+        "id": "aws:eks:retail-store",
+        "name": "retail-store",
+        "type": "EKS_CLUSTER",
+        "provider": "aws",
+        "properties": {
+          "name": "retail-store",
+          "arn": "arn:aws:eks:eu-west-3:123456789012:cluster/retail-store",
+          "status": "ACTIVE",
+          "version": "1.31",
+          "role_arn": "arn:aws:iam::123456789012:role/eks-cluster",
+          "vpc_id": "vpc-0a1",
+          "subnet_ids": [
+            "subnet-02",
+            "subnet-03"
+          ],
+          "security_group_ids": [
+            "sg-0node"
+          ],
+          "endpoint_public_access": true,
+          "endpoint_private_access": true,
+          "tags": {}
+        }
+      },
+      {
+        "id": "aws:eks-nodegroup:retail-store:default",
+        "name": "default",
+        "type": "EKS_NODE_GROUP",
+        "provider": "aws",
+        "properties": {
+          "name": "default",
+          "cluster_name": "retail-store",
+          "arn": "arn:ng",
+          "status": "ACTIVE",
+          "node_role": "arn:aws:iam::123456789012:role/eks-node",
+          "subnet_ids": [
+            "subnet-02",
+            "subnet-03"
+          ],
+          "instance_types": [
+            "t3.medium"
+          ],
+          "desired_size": 1,
+          "min_size": 1,
+          "max_size": 3,
+          "tags": {}
+        }
+      },
+      {
+        "id": "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:123456789012:loadbalancer/net/ui-nlb/abc123",
+        "name": "ui-nlb",
+        "type": "LOAD_BALANCER",
+        "provider": "aws",
+        "properties": {
+          "arn": "arn:aws:elasticloadbalancing:eu-west-3:123456789012:loadbalancer/net/ui-nlb/abc123",
+          "name": "ui-nlb",
+          "dns_name": "ui-nlb-abc123.elb.eu-west-3.amazonaws.com",
+          "scheme": "internet-facing",
+          "type": "network",
+          "state": "active",
+          "vpc_id": "vpc-0a1",
+          "security_group_ids": [],
+          "subnet_ids": [
+            "subnet-00",
+            "subnet-01"
+          ]
+        }
+      },
+      {
+        "id": "aws:iam-role:arn:aws:iam::123456789012:role/eks-cluster",
+        "name": "eks-cluster",
+        "type": "IAM_ROLE",
+        "provider": "aws",
+        "properties": {
+          "name": "eks-cluster",
+          "arn": "arn:aws:iam::123456789012:role/eks-cluster",
+          "path": "/",
+          "description": null,
+          "max_session_duration": 3600
+        }
+      },
+      {
+        "id": "aws:iam-role:arn:aws:iam::123456789012:role/eks-node",
+        "name": "eks-node",
+        "type": "IAM_ROLE",
+        "provider": "aws",
+        "properties": {
+          "name": "eks-node",
+          "arn": "arn:aws:iam::123456789012:role/eks-node",
+          "path": "/",
+          "description": null,
+          "max_session_duration": 3600
+        }
+      },
+      {
+        "id": "aws:internet",
+        "name": "Internet",
+        "type": "INTERNET",
+        "provider": "aws",
+        "properties": {
+          "derived_from": "internet-facing load balancer"
+        }
+      },
+      {
+        "id": "k8s:namespace:default",
+        "name": "default",
+        "type": "NAMESPACE",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "default",
+          "uid": "ns",
+          "labels": {},
+          "phase": "Active"
+        }
+      },
+      {
+        "id": "k8s:node:ip-10-0-2-10",
+        "name": "ip-10-0-2-10",
+        "type": "NODE",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "ip-10-0-2-10",
+          "uid": "n1",
+          "labels": {},
+          "provider_id": "aws:///eu-west-3a/i-0node1",
+          "pod_cidr": null,
+          "internal_ip": "10.0.2.10",
+          "instance_type": "t3.medium",
+          "availability_zone": "eu-west-3a",
+          "kubelet_version": "v1.31"
+        }
+      },
+      {
+        "id": "k8s:deployment:default:ui",
+        "name": "ui",
+        "type": "DEPLOYMENT",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "ui",
+          "namespace": "default",
+          "uid": "ui",
+          "labels": {
+            "app": "ui"
+          },
+          "selector": {
+            "app": "ui"
+          },
+          "replicas": 1,
+          "ready_replicas": 1,
+          "service_account": "ui",
+          "images": [
+            "retail-store/ui:1.0"
+          ]
+        }
+      },
+      {
+        "id": "k8s:deployment:default:catalog",
+        "name": "catalog",
+        "type": "DEPLOYMENT",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "catalog",
+          "namespace": "default",
+          "uid": "catalog",
+          "labels": {
+            "app": "catalog"
+          },
+          "selector": {
+            "app": "catalog"
+          },
+          "replicas": 1,
+          "ready_replicas": 1,
+          "service_account": "catalog",
+          "images": [
+            "retail-store/catalog:1.0"
+          ]
+        }
+      },
+      {
+        "id": "k8s:pod:default:ui-7d9f-abcde",
+        "name": "ui-7d9f-abcde",
+        "type": "POD",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "ui-7d9f-abcde",
+          "namespace": "default",
+          "uid": "ui-7d9f-abcde",
+          "labels": {
+            "app": "ui"
+          },
+          "owner": null,
+          "node_name": "ip-10-0-2-10",
+          "service_account": "ui",
+          "phase": "Running",
+          "pod_ip": "10.0.2.50",
+          "images": []
+        }
+      },
+      {
+        "id": "k8s:pod:default:catalog-5c8b-fghij",
+        "name": "catalog-5c8b-fghij",
+        "type": "POD",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "catalog-5c8b-fghij",
+          "namespace": "default",
+          "uid": "catalog-5c8b-fghij",
+          "labels": {
+            "app": "catalog"
+          },
+          "owner": null,
+          "node_name": "ip-10-0-2-10",
+          "service_account": "catalog",
+          "phase": "Running",
+          "pod_ip": "10.0.2.50",
+          "images": []
+        }
+      },
+      {
+        "id": "k8s:pod:default:catalog-mysql-0",
+        "name": "catalog-mysql-0",
+        "type": "POD",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "catalog-mysql-0",
+          "namespace": "default",
+          "uid": "catalog-mysql-0",
+          "labels": {
+            "app": "catalog-mysql"
+          },
+          "owner": null,
+          "node_name": "ip-10-0-2-10",
+          "service_account": "default",
+          "phase": "Running",
+          "pod_ip": "10.0.2.50",
+          "images": []
+        }
+      },
+      {
+        "id": "k8s:service:default:ui",
+        "name": "ui",
+        "type": "SERVICE",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "ui",
+          "namespace": "default",
+          "uid": "ui",
+          "labels": {},
+          "annotations": {},
+          "selector": {
+            "app": "ui"
+          },
+          "service_type": "LoadBalancer",
+          "cluster_ip": "172.20.0.1",
+          "ports": [
+            {
+              "name": "http",
+              "port": 80,
+              "target_port": "8080",
+              "protocol": "TCP"
+            }
+          ],
+          "external_endpoints": [
+            "ui-nlb-abc123.elb.eu-west-3.amazonaws.com"
+          ]
+        }
+      },
+      {
+        "id": "k8s:service:default:catalog",
+        "name": "catalog",
+        "type": "SERVICE",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "catalog",
+          "namespace": "default",
+          "uid": "catalog",
+          "labels": {},
+          "annotations": {},
+          "selector": {
+            "app": "catalog"
+          },
+          "service_type": "ClusterIP",
+          "cluster_ip": "172.20.0.1",
+          "ports": [
+            {
+              "name": "http",
+              "port": 80,
+              "target_port": "8080",
+              "protocol": "TCP"
+            }
+          ],
+          "external_endpoints": []
+        }
+      },
+      {
+        "id": "k8s:service:default:catalog-mysql",
+        "name": "catalog-mysql",
+        "type": "SERVICE",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "catalog-mysql",
+          "namespace": "default",
+          "uid": "catalog-mysql",
+          "labels": {},
+          "annotations": {},
+          "selector": {
+            "app": "catalog-mysql"
+          },
+          "service_type": "ClusterIP",
+          "cluster_ip": "172.20.0.1",
+          "ports": [
+            {
+              "name": "http",
+              "port": 80,
+              "target_port": "8080",
+              "protocol": "TCP"
+            }
+          ],
+          "external_endpoints": []
+        }
+      },
+      {
+        "id": "k8s:statefulset:default:catalog-mysql",
+        "name": "catalog-mysql",
+        "type": "STATEFUL_SET",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "catalog-mysql",
+          "namespace": "default",
+          "uid": "ss",
+          "labels": {},
+          "selector": {
+            "app": "catalog-mysql"
+          },
+          "replicas": 1,
+          "ready_replicas": 1,
+          "service_name": "catalog-mysql",
+          "service_account": "default",
+          "images": [
+            "mysql:8"
+          ]
+        }
+      },
+      {
+        "id": "k8s:service-account:default:ui",
+        "name": "ui",
+        "type": "SERVICE_ACCOUNT",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "ui",
+          "namespace": "default",
+          "uid": "ui",
+          "labels": {},
+          "annotations": {}
+        }
+      },
+      {
+        "id": "k8s:service-account:default:catalog",
+        "name": "catalog",
+        "type": "SERVICE_ACCOUNT",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "catalog",
+          "namespace": "default",
+          "uid": "catalog",
+          "labels": {},
+          "annotations": {}
+        }
+      },
+      {
+        "id": "k8s:service-account:default:default",
+        "name": "default",
+        "type": "SERVICE_ACCOUNT",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "default",
+          "namespace": "default",
+          "uid": "default",
+          "labels": {},
+          "annotations": {}
+        }
+      },
+      {
+        "id": "k8s:ingress:default:ui",
+        "name": "ui",
+        "type": "INGRESS",
+        "provider": "kubernetes",
+        "properties": {
+          "name": "ui",
+          "namespace": "default",
+          "uid": "ing",
+          "labels": {},
+          "class_name": "alb",
+          "hosts": [],
+          "backend_services": [
+            "ui"
+          ]
+        }
+      }
+    ],
+    "relationships": [
+      {
+        "source": "aws:vpc:vpc-0a1",
+        "target": "aws:subnet:subnet-00",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "aws:vpc:vpc-0a1",
+        "target": "aws:subnet:subnet-01",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "aws:vpc:vpc-0a1",
+        "target": "aws:subnet:subnet-02",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "aws:vpc:vpc-0a1",
+        "target": "aws:subnet:subnet-03",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "aws:vpc:vpc-0a1",
+        "target": "aws:security-group:sg-0node",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "aws:ec2:i-0node1",
+        "target": "aws:subnet:subnet-02",
+        "type": "LOCATED_IN"
+      },
+      {
+        "source": "aws:ec2:i-0node1",
+        "target": "aws:security-group:sg-0node",
+        "type": "USES"
+      },
+      {
+        "source": "aws:ec2:i-0node1",
+        "target": "aws:eks-nodegroup:retail-store:default",
+        "type": "MEMBER_OF"
+      },
+      {
+        "source": "aws:eks:retail-store",
+        "target": "aws:vpc:vpc-0a1",
+        "type": "LOCATED_IN"
+      },
+      {
+        "source": "aws:eks:retail-store",
+        "target": "aws:iam-role:arn:aws:iam::123456789012:role/eks-cluster",
+        "type": "USES"
+      },
+      {
+        "source": "aws:eks:retail-store",
+        "target": "aws:security-group:sg-0node",
+        "type": "USES"
+      },
+      {
+        "source": "aws:eks:retail-store",
+        "target": "aws:eks-nodegroup:retail-store:default",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "aws:eks-nodegroup:retail-store:default",
+        "target": "aws:iam-role:arn:aws:iam::123456789012:role/eks-node",
+        "type": "USES"
+      },
+      {
+        "source": "aws:eks-nodegroup:retail-store:default",
+        "target": "aws:subnet:subnet-02",
+        "type": "LOCATED_IN"
+      },
+      {
+        "source": "aws:eks-nodegroup:retail-store:default",
+        "target": "aws:subnet:subnet-03",
+        "type": "LOCATED_IN"
+      },
+      {
+        "source": "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:123456789012:loadbalancer/net/ui-nlb/abc123",
+        "target": "aws:vpc:vpc-0a1",
+        "type": "LOCATED_IN"
+      },
+      {
+        "source": "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:123456789012:loadbalancer/net/ui-nlb/abc123",
+        "target": "aws:subnet:subnet-00",
+        "type": "LOCATED_IN"
+      },
+      {
+        "source": "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:123456789012:loadbalancer/net/ui-nlb/abc123",
+        "target": "aws:subnet:subnet-01",
+        "type": "LOCATED_IN"
+      },
+      {
+        "source": "aws:internet",
+        "target": "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:123456789012:loadbalancer/net/ui-nlb/abc123",
+        "type": "EXPOSES"
+      },
+      {
+        "source": "aws:eks:retail-store",
+        "target": "k8s:namespace:default",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "aws:eks:retail-store",
+        "target": "k8s:node:ip-10-0-2-10",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:node:ip-10-0-2-10",
+        "target": "aws:ec2:i-0node1",
+        "type": "RUNS_ON"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:deployment:default:ui",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:deployment:default:catalog",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:pod:default:ui-7d9f-abcde",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:pod:default:catalog-5c8b-fghij",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:pod:default:catalog-mysql-0",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:service:default:ui",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:service:default:catalog",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:service:default:catalog-mysql",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:statefulset:default:catalog-mysql",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:service-account:default:ui",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:service-account:default:catalog",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:service-account:default:default",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:namespace:default",
+        "target": "k8s:ingress:default:ui",
+        "type": "CONTAINS"
+      },
+      {
+        "source": "k8s:pod:default:ui-7d9f-abcde",
+        "target": "k8s:node:ip-10-0-2-10",
+        "type": "RUNS_ON"
+      },
+      {
+        "source": "k8s:pod:default:ui-7d9f-abcde",
+        "target": "k8s:service-account:default:ui",
+        "type": "USES"
+      },
+      {
+        "source": "k8s:pod:default:catalog-5c8b-fghij",
+        "target": "k8s:node:ip-10-0-2-10",
+        "type": "RUNS_ON"
+      },
+      {
+        "source": "k8s:pod:default:catalog-5c8b-fghij",
+        "target": "k8s:service-account:default:catalog",
+        "type": "USES"
+      },
+      {
+        "source": "k8s:pod:default:catalog-mysql-0",
+        "target": "k8s:node:ip-10-0-2-10",
+        "type": "RUNS_ON"
+      },
+      {
+        "source": "k8s:pod:default:catalog-mysql-0",
+        "target": "k8s:service-account:default:default",
+        "type": "USES"
+      },
+      {
+        "source": "k8s:deployment:default:ui",
+        "target": "k8s:service-account:default:ui",
+        "type": "USES"
+      },
+      {
+        "source": "k8s:deployment:default:ui",
+        "target": "k8s:pod:default:ui-7d9f-abcde",
+        "type": "SELECTS"
+      },
+      {
+        "source": "k8s:deployment:default:catalog",
+        "target": "k8s:service-account:default:catalog",
+        "type": "USES"
+      },
+      {
+        "source": "k8s:deployment:default:catalog",
+        "target": "k8s:pod:default:catalog-5c8b-fghij",
+        "type": "SELECTS"
+      },
+      {
+        "source": "k8s:statefulset:default:catalog-mysql",
+        "target": "k8s:service-account:default:default",
+        "type": "USES"
+      },
+      {
+        "source": "k8s:statefulset:default:catalog-mysql",
+        "target": "k8s:pod:default:catalog-mysql-0",
+        "type": "SELECTS"
+      },
+      {
+        "source": "k8s:service:default:ui",
+        "target": "k8s:pod:default:ui-7d9f-abcde",
+        "type": "SELECTS"
+      },
+      {
+        "source": "k8s:service:default:ui",
+        "target": "k8s:deployment:default:ui",
+        "type": "EXPOSES"
+      },
+      {
+        "source": "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:123456789012:loadbalancer/net/ui-nlb/abc123",
+        "target": "k8s:service:default:ui",
+        "type": "ROUTES_TO"
+      },
+      {
+        "source": "k8s:service:default:catalog",
+        "target": "k8s:pod:default:catalog-5c8b-fghij",
+        "type": "SELECTS"
+      },
+      {
+        "source": "k8s:service:default:catalog",
+        "target": "k8s:deployment:default:catalog",
+        "type": "EXPOSES"
+      },
+      {
+        "source": "k8s:service:default:catalog-mysql",
+        "target": "k8s:pod:default:catalog-mysql-0",
+        "type": "SELECTS"
+      },
+      {
+        "source": "k8s:service:default:catalog-mysql",
+        "target": "k8s:statefulset:default:catalog-mysql",
+        "type": "EXPOSES"
+      },
+      {
+        "source": "k8s:ingress:default:ui",
+        "target": "k8s:service:default:ui",
+        "type": "ROUTES_TO"
+      }
+    ],
+    "summary": {
+      "aws_resources": 13,
+      "kubernetes_resources": 15,
+      "relationships": 55
+    }
+  },
+  "changes": [
+    {
+      "change_id": "change-001",
+      "operation": "update",
+      "resource_id": "k8s:deployment:default:ui",
+      "resource_type": "DEPLOYMENT",
+      "provider": "kubernetes",
+      "property_path": "properties.replicas",
+      "before": 1,
+      "after": 3,
+      "source": {
+        "kind": "scenario",
+        "reference": "S02"
+      }
+    }
+  ],
+  "affected_resources": []
+}

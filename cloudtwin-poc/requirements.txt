@@ -3,3 +3,5 @@ kubernetes>=30,<35
 networkx>=3.2,<4
 pyvis>=0.3.2,<1
 streamlit>=1.40,<2
+pydantic>=2,<3
+pytest>=8
