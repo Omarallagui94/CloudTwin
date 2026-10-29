@@ -1,14 +1,12 @@
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
   id-token: write
 
-name: Release
+name: Upstream Retail Store Release (manual)
 
 jobs:
   release-please:

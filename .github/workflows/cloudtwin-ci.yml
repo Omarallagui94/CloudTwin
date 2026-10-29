@@ -1,0 +1,112 @@
+name: CloudTwin CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudtwin-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-validation:
+    name: Local validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AWS_EC2_METADATA_DISABLED: "true"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: ${{ github.workspace }}/cloudtwin-poc
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cloudtwin-poc/requirements.txt
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+
+      - name: Install CloudTwin dependencies
+        run: python -m pip install --requirement cloudtwin-poc/requirements.txt
+
+      - name: Check Python imports and compilation
+        run: |
+          python -m compileall -q cloudtwin-poc
+          python -c "import analysis, analysis.engine, discovery.normalizer, ingestion, integration.hamdi_fatma, storage.neo4j_store"
+
+      - name: Run Python, integration, and Streamlit AppTest suites
+        run: python -m pytest cloudtwin-poc -q
+
+      - name: Validate JSON schemas and normalized fixture output
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from discovery.normalizer import normalize
+          from jsonschema import Draft202012Validator
+
+          schema_root = Path("cloudtwin-poc/schema/v1")
+          schemas = sorted(schema_root.glob("*.schema.json"))
+          for path in schemas:
+              Draft202012Validator.check_schema(json.loads(path.read_text(encoding="utf-8")))
+
+          twin = normalize({}, {}, "local-fixture-region", "local-fixture-cluster")
+          twin_schema = json.loads((schema_root / "twin.schema.json").read_text(encoding="utf-8"))
+          Draft202012Validator(twin_schema).validate(twin)
+          print(f"Validated {len(schemas)} schemas and one deterministic Twin fixture")
+          PY
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive terraform
+
+      - name: Initialize Terraform locally without a backend
+        run: terraform -chdir=terraform/eks/minimal init -backend=false -input=false -no-color
+
+      - name: Run safe local Terraform validation
+        run: terraform -chdir=terraform/eks/minimal validate -no-color
+
+      - name: Run Omar scenario and JSON/YAML validator
+        run: python cloudtwin-poc/scripts/validate_scenarios.py
+
+  kind-scenarios:
+    name: Optional Kind S01/S02
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Kind and kubectl
+        uses: helm/kind-action@v1.12.0
+        with:
+          install_only: true
+
+      - name: Validate S01 in Kind
+        run: python cloudtwin-poc/scripts/validate_s01_kind.py
+
+      - name: Validate S02 in Kind
+        run: python cloudtwin-poc/scripts/validate_s02_kind.py
