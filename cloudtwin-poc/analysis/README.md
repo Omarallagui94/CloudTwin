@@ -40,7 +40,7 @@ analysis/
 │   ├── __init__.py        # registre des règles actives
 │   ├── base.py            # classe Rule commune
 │   ├── resilience/        # RES-001, RES-003
-│   └── security/          # NET-*, IAM-*, K8S-* (à venir)
+│   └── security/          # NET-003 ; NET-001/002, IAM-*, K8S-* à venir
 └── tests/
     ├── fixtures/          # générées avec le vrai normalizer.py (IDs et relations réels)
     ├── test_rules.py
@@ -48,6 +48,16 @@ analysis/
     └── test_adapters.py
 docs/rules.md              # catalogue des règles
 ```
+
+## Règles actives
+
+| ID | Gravité | Déclencheur | Statut `not_evaluated` si… |
+|---|---|---|---|
+| `RULE-RES-001` | HIGH (CRITICAL à 0) | Workload réduit sous 2 réplicas | nombre futur inconnu |
+| `RULE-RES-003` | MEDIUM | Suppression d'une ressource dont d'autres dépendent | ressource absente du jumeau |
+| `RULE-NET-003` | CRITICAL | Ingress `0.0.0.0/0` ou `::/0` sur 3306 / 5432 (TCP ou tous protocoles) | ingress futur inconnu ou règle illisible |
+
+`RULE-NET-003` lit les deux formats d'ingress du projet : Terraform (`from_port`, `cidr_blocks`, sortie de l'ingestion) et API AWS (`FromPort`, `IpRanges`, sortie de la découverte). Elle signale aussi une exposition déjà présente avant le changement (`already_exposed_before`), distinguée de `newly_exposed`. Référence : *exposition potentielle associée à MITRE ATT&CK T1190* (jamais « T1190 détecté »).
 
 ## Ajouter une règle
 
