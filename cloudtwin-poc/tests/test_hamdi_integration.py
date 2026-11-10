@@ -64,3 +64,22 @@ def test_s01_s02_bridge_and_resilience_results():
         assert context.affected_resources == []
     assert ("RULE-RES-001", "pass") in statuses["S01"]
     assert ("RULE-RES-001", "fail") in statuses["S02"]
+
+
+@pytest.mark.parametrize("source", ["scenario", "terraform_plan"])
+def test_s04_chain_produces_net003_critical(source):
+    """Milestone 1 (sans Future Twin) : S04 d'Omar -> ingestion Hamdi -> NET-003."""
+    scenario, twin = _scenario("S04")
+    ingester = ChangeIngester(twin)
+    if source == "scenario":
+        changeset = ingester.ingest_scenario(scenario)
+    else:
+        plan = next(ROOT.joinpath("scenarios").glob("S04-*")) / "proposed-plan.json"
+        changeset = ingester.ingest_terraform_plan(plan)
+
+    result = run_analysis(context_from_changeset(changeset, twin))
+    [finding] = [f for f in result.findings if f.rule_id == "RULE-NET-003"]
+    assert finding.status.value == "fail"
+    assert finding.severity.value == "critical"
+    assert "k8s:statefulset:default:orders-postgresql" in finding.affected_resource_ids
+    assert result.summary["fail_critical"] == 1
