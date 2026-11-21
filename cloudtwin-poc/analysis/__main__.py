@@ -6,6 +6,7 @@
   python -m analysis --twin outputs/current_state.json --scenario scenarios/scenario-01.json
       Analyse un scénario du PoC actuel (pont temporaire, voir adapters.py).
 
+  Ajouter --explain pour l'explication de l'analyste IA (champ ai_explanation).
   Ajouter --fail-at 80 pour bloquer une pull request quand le score atteint 80 (CI).
 """
 
@@ -25,6 +26,8 @@ def main() -> int:
     p.add_argument("--scenario", help="scénario au format cloudtwin-poc/scenarios")
     p.add_argument("--fail-at", type=int, metavar="SCORE",
                    help="code de sortie 1 si le score global atteint SCORE (ex. 80 pour la CI)")
+    p.add_argument("--explain", action="store_true",
+                   help="ajoute ai_explanation (analyste IA, ou texte de secours sans LLM)")
     args = p.parse_args()
 
     if args.context:
@@ -36,7 +39,11 @@ def main() -> int:
         p.error("donner un contexte, ou --twin et --scenario")
 
     result = run(ctx)
-    print(result.model_dump_json(indent=2))
+    output = result.model_dump(mode="json")
+    if args.explain:
+        from ai_analyst import explain   # import tardif : le moteur ne dépend pas de l'IA
+        output["ai_explanation"] = explain(result).model_dump(mode="json")
+    print(json.dumps(output, indent=2, ensure_ascii=False))
     print(result.risk["explanation"], file=sys.stderr)
     if args.fail_at is not None:
         return 1 if result.risk["score"] >= args.fail_at else 0
