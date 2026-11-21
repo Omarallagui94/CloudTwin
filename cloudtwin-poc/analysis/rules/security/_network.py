@@ -27,7 +27,7 @@ INGRESS_KEYS = ("ingress", "ingress_rules", "IpPermissions")
 
 # Ports « connus » : sert seulement à signaler le chevauchement avec d'autres règles.
 OVERLAPS = {
-    "RULE-NET-001": (22,),
+    "RULE-NET-001": (22, 3389),
     "RULE-NET-003": (3306, 5432),
 }
 
