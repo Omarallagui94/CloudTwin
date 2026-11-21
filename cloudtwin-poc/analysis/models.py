@@ -149,3 +149,5 @@ class AnalysisResult(BaseModel):
     simulation_id: str
     findings: list[Finding]
     summary: dict[str, int]
+    blast_radius: dict[str, Any] | None = None   # ressources touchées (analysis/blast_radius)
+    risk: dict[str, Any] | None = None   # score global (analysis/scoring), voir docs/scoring.md
