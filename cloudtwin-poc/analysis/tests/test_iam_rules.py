@@ -150,6 +150,8 @@ def test_terraform_plan_through_ingestion(statement, rule_id, severity):
     after = [{"name": "extra", "policy": json.dumps({"Version": "2012-10-17", "Statement": [statement]})}]
     changeset = ChangeIngester(REAL_TWIN).ingest_terraform_plan(_plan([], after))
     result = run(context_from_changeset(changeset, REAL_TWIN))
-    fails = [f for f in result.findings if f.status == Status.FAIL]
-    assert [(f.rule_id, f.severity) for f in fails] == [(rule_id, severity)]
-    assert fails[0].change_ids == [changeset.changes[0].change_id]
+    fails = {f.rule_id: f for f in result.findings if f.status == Status.FAIL}
+    assert fails[rule_id].severity == severity
+    assert fails[rule_id].change_ids == [changeset.changes[0].change_id]
+    # Le Pod ui est public et tourne sur un nœud de ce rôle : IAM-003 voit le chemin.
+    assert set(fails) == {rule_id, "RULE-IAM-003"}
