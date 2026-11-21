@@ -26,14 +26,15 @@ python -m analysis --twin outputs/current_state.json --scenario scenarios/scenar
 python -m analysis analysis/tests/fixtures/res001/positive_3_to_1.json
 ```
 
-Code de sortie : `0` si aucun `fail`, `1` sinon (utilisable dans la CI pour bloquer une PR).
+Code de sortie : `0` si aucun `fail`, `1` sinon. Avec `--fail-at 80`, `1` seulement si le score global atteint 80 (pour bloquer une PR dans la CI).
 
 ## Structure
 
 ```text
 analysis/
 ├── models.py              # contrat d'entrée / sortie (Pydantic)
-├── engine.py              # exécute les règles, trie et résume
+├── engine.py              # exécute les règles, trie, résume et calcule le score
+├── scoring/score.py       # score global 0–100 (voir docs/scoring.md)
 ├── adapters.py            # pont temporaire : current_state.json + scénario du PoC
 ├── __main__.py            # ligne de commande
 ├── rules/
@@ -50,7 +51,8 @@ analysis/
     ├── test_res_002.py
     ├── test_net_001.py
     ├── test_iam_rules.py
-    └── test_iam_003.py
+    ├── test_iam_003.py
+    └── test_scoring.py
 docs/rules.md              # catalogue des règles
 ```
 

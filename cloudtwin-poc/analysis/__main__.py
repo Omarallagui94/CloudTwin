@@ -5,6 +5,8 @@
 
   python -m analysis --twin outputs/current_state.json --scenario scenarios/scenario-01.json
       Analyse un scénario du PoC actuel (pont temporaire, voir adapters.py).
+
+  Ajouter --fail-at 80 pour bloquer une pull request quand le score atteint 80 (CI).
 """
 
 import argparse
@@ -21,6 +23,8 @@ def main() -> int:
     p.add_argument("context", nargs="?", help="contexte d'analyse complet (JSON)")
     p.add_argument("--twin", help="current_state.json produit par discover.py")
     p.add_argument("--scenario", help="scénario au format cloudtwin-poc/scenarios")
+    p.add_argument("--fail-at", type=int, metavar="SCORE",
+                   help="code de sortie 1 si le score global atteint SCORE (ex. 80 pour la CI)")
     args = p.parse_args()
 
     if args.context:
@@ -33,6 +37,9 @@ def main() -> int:
 
     result = run(ctx)
     print(result.model_dump_json(indent=2))
+    print(result.risk["explanation"], file=sys.stderr)
+    if args.fail_at is not None:
+        return 1 if result.risk["score"] >= args.fail_at else 0
     return 1 if result.summary["fail"] else 0
 
 

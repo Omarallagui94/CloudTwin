@@ -9,6 +9,7 @@ from pathlib import Path
 from analysis.models import SCHEMA_VERSION, AnalysisContext, AnalysisResult, Finding
 from analysis.rules import ALL_RULES
 from analysis.rules.base import Rule
+from analysis.scoring.score import compute_score, explain
 
 
 class SchemaVersionError(ValueError):
@@ -45,4 +46,6 @@ def run(ctx: AnalysisContext, rules: list[Rule] | None = None) -> AnalysisResult
         "not_evaluated": by_status.get("not_evaluated", 0),
         **{f"fail_{s}": by_severity.get(s, 0) for s in ("critical", "high", "medium", "low")},
     }
-    return AnalysisResult(simulation_id=ctx.simulation_id, findings=findings, summary=summary)
+    score = compute_score(findings, ctx.affected_resources)
+    risk = {**score.model_dump(mode="json"), "explanation": explain(score)}
+    return AnalysisResult(simulation_id=ctx.simulation_id, findings=findings, summary=summary, risk=risk)
