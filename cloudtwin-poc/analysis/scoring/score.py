@@ -97,7 +97,8 @@ def compute_score(findings: list[Finding],
             weight=WEIGHTS[f.severity] if counted else 0, counted=counted,
             reason=None if counted else f"même risque que {winner.rule_id}, déjà compté"))
 
-    indirect = sorted({a.target for a in affected_resources or [] if a.impact == "indirect"})
+    direct = {a.target for a in affected_resources or [] if a.impact == "direct"}
+    indirect = sorted({a.target for a in affected_resources or [] if a.impact == "indirect"} - direct)
     bonus = min(BLAST_RADIUS_CAP, len(indirect))
     points = sum(line.weight for line in lines)
     score = min(100, points + bonus)

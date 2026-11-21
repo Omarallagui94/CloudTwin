@@ -8,6 +8,7 @@ from pathlib import Path
 
 from analysis.models import SCHEMA_VERSION, AnalysisContext, AnalysisResult, Finding
 from analysis.rules import ALL_RULES
+from analysis.blast_radius import compute as compute_blast_radius
 from analysis.rules.base import Rule
 from analysis.scoring.score import compute_score, explain
 
@@ -32,6 +33,10 @@ def _sort_key(f: Finding) -> tuple:
 
 
 def run(ctx: AnalysisContext, rules: list[Rule] | None = None) -> AnalysisResult:
+    # Blast radius d'abord : les règles s'en servent pour leurs ressources impactées.
+    radius = compute_blast_radius(ctx)
+    if not ctx.affected_resources:
+        ctx = ctx.model_copy(update={"affected_resources": radius.affected})
     findings: list[Finding] = []
     for rule in rules if rules is not None else ALL_RULES:
         findings.extend(rule.evaluate(ctx))
@@ -48,4 +53,5 @@ def run(ctx: AnalysisContext, rules: list[Rule] | None = None) -> AnalysisResult
     }
     score = compute_score(findings, ctx.affected_resources)
     risk = {**score.model_dump(mode="json"), "explanation": explain(score)}
-    return AnalysisResult(simulation_id=ctx.simulation_id, findings=findings, summary=summary, risk=risk)
+    return AnalysisResult(simulation_id=ctx.simulation_id, findings=findings, summary=summary,
+                          blast_radius=radius.model_dump(mode="json"), risk=risk)

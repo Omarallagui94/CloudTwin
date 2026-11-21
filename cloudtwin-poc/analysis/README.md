@@ -35,6 +35,7 @@ analysis/
 ├── models.py              # contrat d'entrée / sortie (Pydantic)
 ├── engine.py              # exécute les règles, trie, résume et calcule le score
 ├── scoring/score.py       # score global 0–100 (voir docs/scoring.md)
+├── blast_radius/radius.py # ressources touchées : direct (1 saut) / indirect (2–3 sauts)
 ├── adapters.py            # pont temporaire : current_state.json + scénario du PoC
 ├── __main__.py            # ligne de commande
 ├── rules/
@@ -52,7 +53,8 @@ analysis/
     ├── test_net_001.py
     ├── test_iam_rules.py
     ├── test_iam_003.py
-    └── test_scoring.py
+    ├── test_scoring.py
+    └── test_blast_radius.py
 docs/rules.md              # catalogue des règles
 ```
 

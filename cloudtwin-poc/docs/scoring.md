@@ -11,6 +11,7 @@ score = min(100, Σ poids(gravité) + bonus_blast_radius)
 
 poids  : CRITICAL = 30 · HIGH = 20 · MEDIUM = 10 · LOW = 5
 bonus  : +1 par ressource indirectement impactée (sans doublon), plafonné à 10
+         (calculé par analysis/blast_radius : indirect = 2 ou 3 sauts de dépendance)
 niveau : 0–29 Faible · 30–59 Moyen · 60–79 Élevé · 80–100 Critique
 ```
 
