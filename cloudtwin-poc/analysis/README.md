@@ -39,14 +39,15 @@ analysis/
 ├── rules/
 │   ├── __init__.py        # registre des règles actives
 │   ├── base.py            # classe Rule commune
-│   ├── resilience/        # RES-001, RES-003
+│   ├── resilience/        # RES-001, RES-002, RES-003
 │   └── security/          # NET-002, NET-003, NET-004 ; NET-001, IAM-*, K8S-* à venir
 └── tests/
     ├── fixtures/          # générées avec le vrai normalizer.py (IDs et relations réels)
     ├── test_rules.py
     ├── test_engine.py
     ├── test_adapters.py
-    └── test_network_rules.py
+    ├── test_network_rules.py
+    └── test_res_002.py
 docs/rules.md              # catalogue des règles
 ```
 
