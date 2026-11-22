@@ -60,7 +60,11 @@ def test_s01_s02_bridge_and_resilience_results():
         context = context_from_changeset(changeset, twin)
         result = run_analysis(context)
         statuses[scenario_id] = [(f.rule_id, f.status.value) for f in result.findings]
-        assert context.future_twin is None
+        # Le pont construit maintenant le Future Twin : les réplicas y ont leur nouvelle valeur.
+        change = changeset.changes[0]
+        future_ui = context.future_twin.get(change.resource_id)
+        assert future_ui.properties["replicas"] == change.after
+        assert context.current_twin.get(change.resource_id).properties["replicas"] == change.before
         assert context.affected_resources == []
     assert ("RULE-RES-001", "pass") in statuses["S01"]
     assert ("RULE-RES-001", "fail") in statuses["S02"]
