@@ -35,6 +35,10 @@ explanation = explain(result)   # summary, recommendations[], source = "llm" | "
 
 Le champ `warnings` indique pourquoi une réponse du LLM a été écartée.
 
+## Correctifs proposés par l'IA
+
+`ai_analyst/fixes.py` : le LLM propose une nouvelle valeur pour les changements en échec, et chaque proposition est rejouée dans le jumeau (`python -m analysis contexte.json --fixes`). Elle n'est retenue que si le score baisse sans nouveau risque. Voir `docs/remediation.md`.
+
 ## Tests
 
-`ai_analyst/tests/` : 17 tests avec un LLM simulé, sans appel réseau.
+`ai_analyst/tests/` : 22 tests avec un LLM simulé, sans appel réseau.
