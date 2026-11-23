@@ -14,17 +14,12 @@ from botocore.exceptions import BotoCoreError, ClientError
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 
-from analysis.adapters import context_from_poc
-from analysis.engine import run as run_analysis
 from discovery.aws_collector import AWSCollector
 from discovery.kubernetes_collector import KubernetesCollector
 from discovery.normalizer import normalize
-from integration.scenario_compat import (
-    CompatibilityError,
-    discover_scenarios,
-    to_fatma_poc_scenario,
-)
+from integration.scenario_compat import CompatibilityError, discover_scenarios
 from visualization.build_graph import main as build_graph
+from visualization.simulation_view import render_llm_settings, render_simulation
 
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "outputs" / "current_state.json"
@@ -231,48 +226,13 @@ def render_scenario(twin: dict[str, Any] | None) -> None:
         unsafe_allow_html=True,
     )
     st.write("")
-    st.button("Simulate Change — Next Phase", disabled=True, use_container_width=True)
-    render_local_analysis(selected_id, scenario)
-
-
-def render_local_analysis(scenario_id: str, scenario: dict[str, Any]) -> None:
-    """Render temporary S01/S02 fixture results without implying canonical output."""
-    st.subheader("Local Analysis PoC")
-    if scenario_id not in {"S01", "S02"}:
-        st.info("The temporary local analysis integration is validated for S01 and S02 only.")
+    st.subheader("Simulate Change")
+    st.caption("Le changement est appliqué au jumeau du scénario (Future Twin), jamais à AWS.")
+    scenario_dirs = sorted(SCENARIOS_PATH.glob(f"{selected_id}-*"))
+    if len(scenario_dirs) != 1 or not (scenario_dirs[0] / "current-twin.json").exists():
+        st.warning(f"The Local Fixture Mode Current Twin for {selected_id} is unavailable.")
         return
-
-    fixture_paths = list(SCENARIOS_PATH.glob(f"{scenario_id}-*/current-twin.json"))
-    fixture_twin = load_json(fixture_paths[0]) if len(fixture_paths) == 1 else None
-    if fixture_twin is None:
-        st.warning(f"The Local Fixture Mode Current Twin for {scenario_id} is unavailable.")
-        return
-
-    try:
-        context = context_from_poc(fixture_twin, to_fatma_poc_scenario(scenario))
-        result = run_analysis(context)
-    except (CompatibilityError, ValueError, KeyError) as exc:
-        st.warning(f"Temporary analysis compatibility failed: {exc}")
-        return
-
-    for finding in result.findings:
-        severity = finding.severity.value.upper()
-        if finding.status.value == "fail":
-            st.error(f"ACTIVE {severity}-SEVERITY FINDING — {finding.title}")
-            st.write(finding.description)
-            if finding.affected_resource_ids:
-                st.caption(
-                    "Affected-resource IDs below come from Fatma's temporary one-hop PoC "
-                    "approximation; they are not Hamdi's canonical dependency analysis."
-                )
-                st.code("\n".join(finding.affected_resource_ids))
-        elif finding.status.value == "pass":
-            st.success("PASS — no active resilience finding")
-            st.write(finding.description)
-            st.caption(f"Potential rule severity if it fails: {severity}")
-        else:
-            st.warning(f"NOT EVALUATED — {finding.title}")
-            st.caption(f"Potential rule severity if it fails: {severity}")
+    render_simulation(selected_id, scenario_dirs[0])
 
 
 def main() -> None:
@@ -292,6 +252,8 @@ def main() -> None:
         st.divider()
         discover_clicked = st.button("Discover Infrastructure", type="primary", use_container_width=True)
         st.caption("Uses configured AWS credentials and the active local kubeconfig. Read-only discovery only.")
+        st.divider()
+        render_llm_settings()
 
     if discover_clicked:
         try:
