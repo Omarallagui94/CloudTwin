@@ -132,6 +132,9 @@ def test_client_from_env(monkeypatch):
     monkeypatch.setenv("CLOUDTWIN_LLM_MODEL", "mistral")
     client = from_env()
     assert isinstance(client, OllamaClient) and client.model == "mistral"
+    assert client.timeout == 12.0
+    monkeypatch.setenv("CLOUDTWIN_LLM_TIMEOUT", "60")
+    assert from_env().timeout == 60.0
 
 
 def test_cli_end_to_end(tmp_path):

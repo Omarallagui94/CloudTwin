@@ -85,7 +85,7 @@ class RdsMultiAzRule(Rule):
                     change_ids=ids, affected=[rid], evidence=evidence))
             else:
                 findings.append(self.finding(
-                    Status.FAIL, f"{rid} perd sa redondance : multi_az passe de {before_raw} à false.",
+                    Status.FAIL, f"{rid} perd sa redondance : multi_az passe de true à false.",
                     change_ids=ids, affected=self._affected(ctx, change), evidence=evidence))
 
         return findings
