@@ -13,6 +13,9 @@ python -m ai_analyst rapport.json
 
 # Avec un modèle local (Ollama) : aucune donnée ne sort de la machine
 CLOUDTWIN_LLM=ollama CLOUDTWIN_LLM_MODEL=llama3.1 python -m analysis contexte.json --explain
+
+# Machine lente ou premier appel (chargement du modèle) : allonger le délai
+CLOUDTWIN_LLM=ollama CLOUDTWIN_LLM_TIMEOUT=60 python -m analysis contexte.json --explain
 ```
 
 ```python

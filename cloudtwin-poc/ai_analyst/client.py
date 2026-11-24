@@ -4,6 +4,7 @@ Variables d'environnement :
   CLOUDTWIN_LLM          "ollama" pour un modèle local ; absent = pas de LLM
   CLOUDTWIN_LLM_MODEL    nom du modèle (défaut : llama3.1)
   CLOUDTWIN_OLLAMA_URL   adresse d'Ollama (défaut : http://localhost:11434)
+  CLOUDTWIN_LLM_TIMEOUT  délai max d'un appel, en secondes (défaut : 12)
 """
 
 from __future__ import annotations
@@ -29,7 +30,8 @@ class OllamaClient:
 
     def complete(self, messages: list[dict[str, str]]) -> str:
         body = json.dumps({"model": self.model, "messages": messages, "format": "json",
-                           "stream": False, "options": {"temperature": 0}}).encode("utf-8")
+                           "stream": False, "keep_alive": "30m",   # modèle gardé en mémoire
+                           "options": {"temperature": 0}}).encode("utf-8")
         request = urllib.request.Request(f"{self.url}/api/chat", data=body,
                                          headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
@@ -41,5 +43,6 @@ def from_env() -> LLMClient | None:
         return OllamaClient(
             model=os.environ.get("CLOUDTWIN_LLM_MODEL", "llama3.1"),
             url=os.environ.get("CLOUDTWIN_OLLAMA_URL", "http://localhost:11434"),
+            timeout=float(os.environ.get("CLOUDTWIN_LLM_TIMEOUT", "12")),
         )
     return None
