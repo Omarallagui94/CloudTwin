@@ -217,7 +217,8 @@ def llm_client() -> OllamaClient | None:
     if not st.session_state.get("llm_enabled"):
         return None
     return OllamaClient(model=st.session_state.get("llm_model", "llama3.1"),
-                        url=st.session_state.get("llm_url", "http://localhost:11434"))
+                        url=st.session_state.get("llm_url", "http://localhost:11434"),
+                        timeout=float(st.session_state.get("llm_timeout", 30)))
 
 
 def render_llm_settings() -> None:
@@ -226,6 +227,8 @@ def render_llm_settings() -> None:
     if st.session_state.get("llm_enabled"):
         st.text_input("Modèle", value="llama3.1", key="llm_model")
         st.text_input("Adresse Ollama", value="http://localhost:11434", key="llm_url")
+        st.number_input("Délai max par appel (s)", min_value=5, max_value=300, value=30, step=5,
+                        key="llm_timeout", help="llama3.1 répond en ~15 s sur un MacBook.")
     st.caption("Désactivé : explication et correctifs du catalogue, sans IA.")
 
 
