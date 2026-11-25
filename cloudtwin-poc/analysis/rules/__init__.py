@@ -10,6 +10,7 @@ from analysis.rules.security.iam_003_escalation_path import EscalationPathRule
 from analysis.rules.security.net_001_public_admin_port import PublicAdminPortRule
 from analysis.rules.security.net_002_public_security_group import PublicSecurityGroupRule
 from analysis.rules.security.net_003_public_database_port import PublicDatabasePortRule
+from analysis.rules.security.k8s_001_privileged_workload import PrivilegedWorkloadRule
 from analysis.rules.security.net_004_public_service import PublicServiceRule
 
 ALL_RULES: list[Rule] = [
@@ -23,4 +24,5 @@ ALL_RULES: list[Rule] = [
     FullAdminPolicyRule(),
     SensitivePermissionRule(),
     EscalationPathRule(),
+    PrivilegedWorkloadRule(),
 ]

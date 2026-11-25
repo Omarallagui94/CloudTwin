@@ -43,7 +43,7 @@ analysis/
 │   ├── __init__.py        # registre des règles actives
 │   ├── base.py            # classe Rule commune
 │   ├── resilience/        # RES-001, RES-002, RES-003
-│   └── security/          # NET-001 à NET-004, IAM-001 à IAM-003 ; K8S-001 à venir
+│   └── security/          # NET-001 à NET-004, IAM-001 à IAM-003, K8S-001
 └── tests/
     ├── fixtures/          # générées avec le vrai normalizer.py (IDs et relations réels)
     ├── test_rules.py
@@ -54,6 +54,7 @@ analysis/
     ├── test_net_001.py
     ├── test_iam_rules.py
     ├── test_iam_003.py
+    ├── test_k8s_001.py
     ├── test_scoring.py
     ├── test_blast_radius.py
     └── test_remediation.py

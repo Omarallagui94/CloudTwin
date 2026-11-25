@@ -53,6 +53,9 @@ AWS_TYPES = frozenset({
     "IAM_ROLE",
 })
 
+# Kubernetes kinds without a namespace: their canonical ID is k8s:<slug>:<name>.
+CLUSTER_SCOPED_TYPES = ("NAMESPACE", "NODE", "CLUSTER_ROLE", "CLUSTER_ROLE_BINDING")
+
 # Mapping from common aliases / Terraform types / K8s kinds to canonical type & slug
 TYPE_NORMALIZATION: dict[str, tuple[str, str, str]] = {
     # format: key.lower() -> (standard_type, provider, slug)
@@ -79,6 +82,12 @@ TYPE_NORMALIZATION: dict[str, tuple[str, str, str]] = {
     "networkpolicy": ("NETWORK_POLICY", "kubernetes", "network-policy"),
     "networkpolicies": ("NETWORK_POLICY", "kubernetes", "network-policy"),
     "network_policy": ("NETWORK_POLICY", "kubernetes", "network-policy"),
+    "clusterrole": ("CLUSTER_ROLE", "kubernetes", "cluster-role"),
+    "clusterroles": ("CLUSTER_ROLE", "kubernetes", "cluster-role"),
+    "cluster_role": ("CLUSTER_ROLE", "kubernetes", "cluster-role"),
+    "clusterrolebinding": ("CLUSTER_ROLE_BINDING", "kubernetes", "cluster-role-binding"),
+    "clusterrolebindings": ("CLUSTER_ROLE_BINDING", "kubernetes", "cluster-role-binding"),
+    "cluster_role_binding": ("CLUSTER_ROLE_BINDING", "kubernetes", "cluster-role-binding"),
     # AWS & Terraform AWS
     "vpc": ("VPC", "aws", "vpc"),
     "aws_vpc": ("VPC", "aws", "vpc"),
@@ -317,7 +326,7 @@ class CanonicalResourceResolver:
         if allow_synthesize:
             canonical_id = (
                 f"k8s:{slug}:{name}"
-                if canonical_type in ("NAMESPACE", "NODE")
+                if canonical_type in CLUSTER_SCOPED_TYPES
                 else f"k8s:{slug}:{ns}:{name}"
             )
             return canonical_id, canonical_type, provider, ns

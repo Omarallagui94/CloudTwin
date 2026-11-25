@@ -1,6 +1,6 @@
 # Catalogue des règles d'analyse
 
-Le moteur applique 10 règles déterministes à chaque simulation. Chaque règle est une fonction pure : même contexte, mêmes findings. Elle ne parle ni à AWS, ni à Neo4j, ni au LLM.
+Le moteur applique 11 règles déterministes à chaque simulation. Chaque règle est une fonction pure : même contexte, mêmes findings. Elle ne parle ni à AWS, ni à Neo4j, ni au LLM.
 
 Code : `analysis/rules/` · Tests : `analysis/tests/` · Score : `docs/scoring.md`
 
@@ -18,8 +18,9 @@ Code : `analysis/rules/` · Tests : `analysis/tests/` · Score : `docs/scoring.m
 | RULE-IAM-001 | Politique `*:*` (ou AdministratorAccess) | CRITICAL | Politiques d'un `IAM_ROLE` | CIS AWS Foundations v4.0.1 1.16 ; AWS Security Hub IAM.1 |
 | RULE-IAM-002 | `iam:PassRole` ou une autre action d'escalade de privilèges | HIGH | Politiques d'un `IAM_ROLE` | T1098.003 |
 | RULE-IAM-003 | Nouveau chemin Internet → rôle IAM dangereux | CRITICAL | Graphe complet avant / après | T1098.003 ; T1190 |
+| RULE-K8S-001 | Conteneur privilégié, ou ServiceAccount lié à `cluster-admin` | HIGH | Conteneurs d'un workload, `CLUSTER_ROLE_BINDING` | CIS Kubernetes v1.10 5.1.1 / 5.2.2 ; T1611 |
 
-T1190 et T1098.003 sont des techniques MITRE ATT&CK. Le rapport écrit toujours « exposition potentielle associée à… », jamais « T1190 détecté » : un port ouvert est une exposition, pas une attaque.
+T1190, T1098.003 et T1611 sont des techniques MITRE ATT&CK. Le rapport écrit toujours « exposition potentielle associée à… », jamais « T1190 détecté » : un port ouvert est une exposition, pas une attaque.
 
 ## Statuts communs
 
@@ -39,6 +40,8 @@ Les règles réseau et IAM lisent les deux sources du jumeau :
 | Ingress d'un Security Group | `ingress_rules` : `IpProtocol`, `FromPort`, `ToPort`, `IpRanges[].CidrIp`, `Ipv6Ranges[].CidrIpv6` | `ingress` : `protocol`, `from_port`, `to_port`, `cidr_blocks`, `ipv6_cidr_blocks` |
 | Politiques d'un rôle IAM | `attached_policies[]` et `inline_policies[]` avec `document` | `inline_policy[]` (JSON en texte) et `managed_policy_arns[]` |
 | Multi-AZ RDS | `MultiAZ` | `multi_az` |
+| Conteneur privilégié | `containers[].security_context.privileged` | manifest : `spec.template.spec.containers[].securityContext.privileged` |
+| ClusterRoleBinding | `role_ref`, `subjects` | manifest : `roleRef`, `subjects` |
 
 ## Détail des règles
 
@@ -94,6 +97,16 @@ Les règles réseau et IAM lisent les deux sources du jumeau :
   ```
 - **Combinaison** : un Service public seul, ou `iam:PassRole` seul, donnent `pass`. Les deux ensemble donnent CRITICAL. Le finding donne le chemin complet, arête par arête.
 - **Limite** : l'exposition par un Security Group (nœuds en sous-réseau public) n'est pas encore modélisée.
+
+### RULE-K8S-001 — Workload privilégié ou lié à cluster-admin
+- **Échec (workload)** : un conteneur (ou init container) devient `privileged: true`, ou le workload passe sur un ServiceAccount lié à `cluster-admin`. HIGH si c'est nouveau, MEDIUM si c'était déjà le cas.
+- **Échec (ClusterRoleBinding)** : le binding lie `cluster-admin` à un ServiceAccount. Les workloads qui utilisent ce ServiceAccount sont marqués impactés, car ils héritent des pleins pouvoirs sur le cluster.
+- **Pass** : aucun conteneur privilégié et ServiceAccount sans `cluster-admin` ; binding vers un autre rôle, ou seulement vers des utilisateurs et groupes. Un conteneur sans `securityContext` n'est pas privilégié : c'est le défaut de Kubernetes.
+- **`not_evaluated`** : liste des conteneurs inconnue (jumeau collecté avant l'enrichissement de la découverte), ou binding sans rôle ni sujets.
+- **Ignoré** : un changement de réplicas ou une suppression ne peut pas donner de privilèges.
+- **Sources** : propriétés des bindings, et à défaut les relations `USES` du normalizer (binding → `cluster-role:cluster-admin`, binding → ServiceAccount).
+- **Exemple** : un manifest ClusterRoleBinding qui donne `cluster-admin` au ServiceAccount `catalog` donne HIGH ; le Deployment et le Pod `catalog` sont marqués impactés.
+- **Limite** : les RoleBindings (dans un seul namespace) ne sont pas encore collectés.
 
 ## Ajouter une règle
 
