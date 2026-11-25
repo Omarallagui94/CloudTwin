@@ -22,12 +22,57 @@ def _selector(selector: Any) -> dict[str, str]:
     return (selector.match_labels if selector else None) or {}
 
 
+def _security_context(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return {
+        "run_as_user": getattr(value, "run_as_user", None),
+        "run_as_non_root": getattr(value, "run_as_non_root", None),
+    }
+
+
+def _container(container: Any, *, init: bool = False) -> dict[str, Any]:
+    context = getattr(container, "security_context", None)
+    capabilities = getattr(context, "capabilities", None) if context else None
+    return {
+        "name": container.name,
+        "image": container.image,
+        "init": init,
+        "security_context": None if context is None else {
+            "privileged": getattr(context, "privileged", None),
+            "run_as_user": getattr(context, "run_as_user", None),
+            "run_as_non_root": getattr(context, "run_as_non_root", None),
+            "allow_privilege_escalation": getattr(
+                context, "allow_privilege_escalation", None
+            ),
+            "capabilities": None if capabilities is None else {
+                "add": list(getattr(capabilities, "add", None) or []),
+                "drop": list(getattr(capabilities, "drop", None) or []),
+            },
+        },
+    }
+
+
+def _pod_security(spec: Any) -> dict[str, Any]:
+    containers = [_container(item) for item in spec.containers or []]
+    init_containers = [
+        _container(item, init=True) for item in spec.init_containers or []
+    ]
+    return {
+        "pod_security_context": _security_context(spec.security_context),
+        "containers": containers,
+        "init_containers": init_containers,
+        "images": [item["image"] for item in containers],
+    }
+
+
 class KubernetesCollector:
     def __init__(self) -> None:
         config.load_kube_config()
         self.core = client.CoreV1Api()
         self.apps = client.AppsV1Api()
         self.networking = client.NetworkingV1Api()
+        self.rbac = client.RbacAuthorizationV1Api()
         self.warnings: list[str] = []
 
     def _safe(self, label: str, operation: Callable[[], list[dict[str, Any]]]) -> list[dict[str, Any]]:
@@ -78,7 +123,7 @@ class KubernetesCollector:
             "labels": _labels(x.metadata), "selector": _selector(x.spec.selector),
             "replicas": x.spec.replicas, "ready_replicas": x.status.ready_replicas or 0,
             "service_account": x.spec.template.spec.service_account_name or "default",
-            "images": [c.image for c in x.spec.template.spec.containers],
+            **_pod_security(x.spec.template.spec),
         } for x in self._list_all(self.apps.list_deployment_for_all_namespaces)])
 
     def collect_pods(self) -> list[dict[str, Any]]:
@@ -86,7 +131,7 @@ class KubernetesCollector:
             "name": x.metadata.name, "namespace": x.metadata.namespace, "uid": x.metadata.uid,
             "labels": _labels(x.metadata), "owner": _owner(x.metadata), "node_name": x.spec.node_name,
             "service_account": x.spec.service_account_name or "default", "phase": x.status.phase,
-            "pod_ip": x.status.pod_ip, "images": [c.image for c in x.spec.containers],
+            "pod_ip": x.status.pod_ip, **_pod_security(x.spec),
         } for x in self._list_all(self.core.list_pod_for_all_namespaces)])
 
     def collect_services(self) -> list[dict[str, Any]]:
@@ -113,8 +158,25 @@ class KubernetesCollector:
             "replicas": x.spec.replicas, "ready_replicas": x.status.ready_replicas or 0,
             "service_name": x.spec.service_name,
             "service_account": x.spec.template.spec.service_account_name or "default",
-            "images": [c.image for c in x.spec.template.spec.containers],
+            **_pod_security(x.spec.template.spec),
         } for x in self._list_all(self.apps.list_stateful_set_for_all_namespaces)])
+
+    def collect_cluster_roles(self) -> list[dict[str, Any]]:
+        return self._safe("ClusterRole discovery", lambda: [{
+            "name": x.metadata.name,
+            "uid": x.metadata.uid,
+            "labels": _labels(x.metadata),
+            "rules": client.ApiClient().sanitize_for_serialization(x.rules or []),
+        } for x in self._list_all(self.rbac.list_cluster_role)])
+
+    def collect_cluster_role_bindings(self) -> list[dict[str, Any]]:
+        return self._safe("ClusterRoleBinding discovery", lambda: [{
+            "name": x.metadata.name,
+            "uid": x.metadata.uid,
+            "labels": _labels(x.metadata),
+            "role_ref": client.ApiClient().sanitize_for_serialization(x.role_ref),
+            "subjects": client.ApiClient().sanitize_for_serialization(x.subjects or []),
+        } for x in self._list_all(self.rbac.list_cluster_role_binding)])
 
     def collect_service_accounts(self) -> list[dict[str, Any]]:
         return self._safe("ServiceAccount discovery", lambda: [{
@@ -163,5 +225,8 @@ class KubernetesCollector:
             "deployments": self.collect_deployments(), "pods": self.collect_pods(),
             "services": self.collect_services(), "statefulsets": self.collect_statefulsets(),
             "service_accounts": self.collect_service_accounts(), "ingresses": self.collect_ingresses(),
-            "network_policies": self.collect_network_policies(), "warnings": self.warnings,
+            "network_policies": self.collect_network_policies(),
+            "cluster_roles": self.collect_cluster_roles(),
+            "cluster_role_bindings": self.collect_cluster_role_bindings(),
+            "warnings": self.warnings,
         }

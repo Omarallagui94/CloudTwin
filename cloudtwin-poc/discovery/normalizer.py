@@ -150,6 +150,12 @@ def normalize(
             item,
         ))
 
+    for item in aws.get("rds_instances", []):
+        identifier = item["db_instance_identifier"]
+        add_resource(_resource(
+            f"aws:rds-instance:{identifier}", identifier, "RDS_INSTANCE", "aws", item,
+        ))
+
     for item in aws.get("iam_roles", []):
         add_resource(_resource(
             f"aws:iam-role:{item['arn']}",
@@ -276,6 +282,15 @@ def normalize(
         if item.get("scheme") == "internet-facing":
             relate("aws:internet", lb_id, "EXPOSES")
 
+    for item in aws.get("rds_instances", []):
+        rds_id = f"aws:rds-instance:{item['db_instance_identifier']}"
+        if item.get("vpc_id"):
+            relate(rds_id, f"aws:vpc:{item['vpc_id']}", "LOCATED_IN")
+        for subnet_id in item.get("subnet_ids", []):
+            relate(rds_id, f"aws:subnet:{subnet_id}", "LOCATED_IN")
+        for sg_id in item.get("security_group_ids", []):
+            relate(rds_id, f"aws:security-group:{sg_id}", "USES")
+
     # Kubernetes resource types and ID slugs
     kinds = {
         "namespaces": "NAMESPACE",
@@ -287,6 +302,8 @@ def normalize(
         "service_accounts": "SERVICE_ACCOUNT",
         "ingresses": "INGRESS",
         "network_policies": "NETWORK_POLICY",
+        "cluster_roles": "CLUSTER_ROLE",
+        "cluster_role_bindings": "CLUSTER_ROLE_BINDING",
     }
 
     singular = {
@@ -299,6 +316,8 @@ def normalize(
         "SERVICE_ACCOUNT": "service-account",
         "INGRESS": "ingress",
         "NETWORK_POLICY": "network-policy",
+        "CLUSTER_ROLE": "cluster-role",
+        "CLUSTER_ROLE_BINDING": "cluster-role-binding",
     }
 
     for collection, resource_type in kinds.items():
@@ -337,6 +356,23 @@ def normalize(
 
         if instance_id.startswith("i-"):
             relate(node_id, f"aws:ec2:{instance_id}", "RUNS_ON")
+
+    for role in kubernetes.get("cluster_roles", []):
+        relate(eks_id, f"k8s:cluster-role:{role['name']}", "CONTAINS")
+
+    for binding in kubernetes.get("cluster_role_bindings", []):
+        binding_id = f"k8s:cluster-role-binding:{binding['name']}"
+        relate(eks_id, binding_id, "CONTAINS")
+        role_name = (binding.get("role_ref") or {}).get("name")
+        if role_name:
+            relate(binding_id, f"k8s:cluster-role:{role_name}", "USES")
+        for subject in binding.get("subjects", []):
+            if subject.get("kind") == "ServiceAccount" and subject.get("namespace"):
+                relate(
+                    binding_id,
+                    f"k8s:service-account:{subject['namespace']}:{subject.get('name')}",
+                    "USES",
+                )
 
     namespaced_collections = [
         "deployments",

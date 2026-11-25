@@ -1,7 +1,7 @@
 """Tests de RULE-RES-002 (Multi-AZ RDS).
 
-RDS n'est pas encore collecté ni dans le schéma v1 : le jumeau est donc
-synthétique, avec le type proposé RDS_INSTANCE et les relations du normalizer.
+Le jumeau reste synthétique afin d'isoler la règle; la découverte RDS et le
+type RDS_INSTANCE sont testés séparément dans les tests du collecteur.
 """
 
 from analysis.engine import run
