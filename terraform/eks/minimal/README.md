@@ -55,9 +55,12 @@ This section documents the variables and outputs of the Terraform configuration.
 | `environment_name`      | Name of the environment which will be used for all resources created                                                                            | `string` | `retail-store` |   yes    |
 | `opentelemetry_enabled` | Flag to enable OpenTelemetry, which will install the AWS Distro for OpenTelemetry addon in the EKS cluster and create OpenTelemetry collectors. | `bool`   | `false`        |    no    |
 | `istio_enabled`         | Flag to enable Istio, which will install Istio in the EKS cluster                                                                               | `bool`   | `false`        |    no    |
+| `collector_security_enabled` | Create the optional read-only CloudTwin IAM role, EKS `aws-auth` mapping, and Kubernetes RBAC. Requires `collector_trusted_principal_arns`. | `bool` | `false` | no |
+| `collector_trusted_principal_arns` | Explicit IAM principals allowed to assume the collector role. | `list(string)` | `[]` | no |
 
 ### Outputs
 
 | Name                | Description                                            |
 | ------------------- | ------------------------------------------------------ |
 | `configure_kubectl` | AWS CLI command to configure `kubectl` for EKS cluster |
+| `cloudtwin_collector_role_arn` | ARN of the optional read-only CloudTwin collector role |

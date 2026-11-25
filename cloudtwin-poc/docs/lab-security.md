@@ -6,14 +6,14 @@ Fichiers : `security/collector-readonly-policy.json`, `security/k8s-rbac-reader.
 
 ## 1. Le collecteur en lecture seule (moindre privilège)
 
-Le collecteur n'a besoin que de **lire**. Sa politique IAM autorise exactement les 15 appels que fait `discovery/aws_collector.py`, plus `rds:DescribeDBInstances` pour le futur collecteur RDS (RULE-RES-002). Rien d'autre.
+Le collecteur n'a besoin que de **lire**. Sa politique IAM couvre les appels réellement effectués par `discovery/aws_collector.py`, y compris `rds:DescribeDBInstances`. Rien d'autre.
 
 | Service | Actions autorisées |
 |---|---|
 | EC2 | `DescribeVpcs`, `DescribeSubnets`, `DescribeSecurityGroups`, `DescribeInstances` |
 | EKS | `ListClusters`, `DescribeCluster`, `ListNodegroups`, `DescribeNodegroup` |
 | ELB | `elasticloadbalancing:DescribeLoadBalancers` (ALB, NLB et Classic) |
-| RDS | `DescribeDBInstances` (prévu) |
+| RDS | `DescribeDBInstances` |
 | IAM | `ListRoles`, `ListAttachedRolePolicies`, `ListRolePolicies`, `GetRolePolicy`, `GetPolicy`, `GetPolicyVersion` |
 
 - **Aucune action d'écriture**, aucun joker (`ec2:*`, `*`).
@@ -24,40 +24,39 @@ Les tests échouent si le collecteur appelle une action absente de la politique,
 
 ## 2. Le collecteur Kubernetes
 
-- **Access entry EKS** du rôle du collecteur, avec la politique d'accès `AmazonEKSViewPolicy`. Ne **pas** utiliser `AmazonEKSAdminViewPolicy` : elle donne aussi la lecture des Secrets Kubernetes.
-- **Groupe Kubernetes `cloudtwin-rbac-readers`** sur cette access entry, lié au ClusterRole `cloudtwin-rbac-reader` (`security/k8s-rbac-reader.yaml`). Il ne lit que les rôles et les bindings RBAC, ce dont RULE-K8S-001 a besoin pour détecter `cluster-admin`.
+- **Mapping EKS `aws-auth`** du rôle du collecteur vers le groupe Kubernetes `cloudtwin-rbac-readers`, conformément au module EKS v19 utilisé par le projet.
+- **ClusterRole `cloudtwin-rbac-reader`** (`security/k8s-rbac-reader.yaml`) lié à ce groupe. Il lit les ressources prises en charge par le collecteur, ainsi que les ClusterRoles et ClusterRoleBindings, sans lire les Secrets.
 
 ## 3. Mise en place (pôle Cloud)
 
-Extrait Terraform à adapter dans le labo. Il n'a pas pu être validé ici : lancer `terraform validate` avant de l'appliquer.
+La configuration est définie dans `terraform/eks/minimal/collector-security.tf`. Elle est désactivée par défaut. Un plan approuvé doit fournir :
 
 ```hcl
-resource "aws_iam_role" "cloudtwin_collector" {
-  name               = "cloudtwin-collector-readonly"
-  assume_role_policy = data.aws_iam_policy_document.collector_trust.json  # qui peut prendre ce rôle
-}
-
-resource "aws_iam_role_policy" "cloudtwin_collector" {
-  name   = "cloudtwin-collector-readonly"
-  role   = aws_iam_role.cloudtwin_collector.id
-  policy = file("${path.module}/../../cloudtwin-poc/security/collector-readonly-policy.json")
-}
-
-resource "aws_eks_access_entry" "cloudtwin_collector" {
-  cluster_name      = module.retail_app_eks.eks_cluster_id
-  principal_arn     = aws_iam_role.cloudtwin_collector.arn
-  kubernetes_groups = ["cloudtwin-rbac-readers"]
-}
-
-resource "aws_eks_access_policy_association" "cloudtwin_collector_view" {
-  cluster_name  = module.retail_app_eks.eks_cluster_id
-  principal_arn = aws_iam_role.cloudtwin_collector.arn
-  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy"
-  access_scope { type = "cluster" }
-}
+collector_security_enabled        = true
+collector_trusted_principal_arns = ["arn:aws:iam::<account-id>:role/<operator-or-ci-role>"]
 ```
 
-Puis : `kubectl apply -f cloudtwin-poc/security/k8s-rbac-reader.yaml`.
+Terraform crée alors le rôle IAM en lecture seule, l'ajoute au groupe `cloudtwin-rbac-readers` via la ConfigMap `aws-auth` gérée par le module EKS v19 existant, puis crée le ClusterRole et son binding. Le manifeste `security/k8s-rbac-reader.yaml` reste la représentation Kubernetes autonome équivalente; ne pas appliquer les deux modes au même cluster.
+
+Le projet reste volontairement en mode d'authentification EKS `CONFIG_MAP`. Passer aux access entries nécessiterait une migration majeure du module EKS v19 vers v20 et un passage irréversible vers `API_AND_CONFIG_MAP`; cette migration n'est pas nécessaire pour le collecteur et n'est pas incluse dans ce changement.
+
+### État de validation
+
+- Défini dans Terraform et couvert par les tests statiques : oui.
+- Appliqué à un labo AWS/EKS : non.
+- Vérifié avec l'identité réelle du collecteur : non.
+
+Ne pas présenter cette configuration comme déployée avant un `terraform plan` revu, une approbation explicite, l'application temporaire, les contrôles de permissions et la destruction vérifiée du labo.
+
+### Validation live après approbation
+
+1. Examiner le plan et les ressources payantes (EKS, EC2, NAT/ELB/EBS éventuels).
+2. Appliquer uniquement le labo approuvé.
+3. Vérifier `aws sts get-caller-identity`, puis lancer la découverte en lecture seule.
+4. Vérifier `kubectl auth can-i list pods --all-namespaces` et `kubectl auth can-i list clusterrolebindings`.
+5. Vérifier que `kubectl auth can-i get secrets --all-namespaces` et les verbes d'écriture répondent `no`.
+6. Capturer le Current Twin et valider RDS, IAM, security contexts et RBAC.
+7. Exécuter `terraform destroy`, puis vérifier EKS, EC2, Load Balancers, NAT Gateways, EBS, Elastic IPs et RDS.
 
 ## 4. Checklist à chaque session de labo
 
