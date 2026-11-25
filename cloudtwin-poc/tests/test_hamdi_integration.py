@@ -87,3 +87,24 @@ def test_s04_chain_produces_net003_critical(source):
     assert finding.severity.value == "critical"
     assert "k8s:statefulset:default:orders-postgresql" in finding.affected_resource_ids
     assert result.summary["fail_critical"] == 1
+
+
+def test_terraform_plan_bom_and_coverage_metadata(tmp_path):
+    plan = {
+        "format_version": "1.2",
+        "resource_changes": [
+            {"mode": "managed", "type": "null_resource", "name": "wait",
+             "address": "null_resource.wait", "change": {"actions": ["create"], "before": None, "after": {}}},
+            {"mode": "managed", "type": "aws_vpc", "name": "main",
+             "address": "aws_vpc.main", "change": {"actions": ["create"], "before": None, "after": {"cidr_block": "10.0.0.0/16"}}},
+        ],
+    }
+    path = tmp_path / "plan.json"
+    path.write_text("\ufeff" + json.dumps(plan), encoding="utf-8")
+    changeset = ChangeIngester().ingest_terraform_plan(path)
+    coverage = changeset.metadata["terraform_coverage"]
+    assert coverage["status"] == "complete"
+    assert coverage["total_resource_changes"] == 2
+    assert coverage["normalized_supported"] == 1
+    assert coverage["ignored_non_semantic"][0]["type"] == "null_resource"
+    assert coverage["unsupported_material"] == []

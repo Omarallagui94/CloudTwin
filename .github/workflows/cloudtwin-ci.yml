@@ -8,9 +8,39 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      current_twin:
+        description: Repository-relative path to a discovered Current Twin JSON
+        required: false
+        type: string
+      proposed_change:
+        description: Repository-relative path to Terraform plan JSON or Kubernetes manifest
+        required: false
+        type: string
+      change_kind:
+        description: Proposed-change format
+        required: false
+        type: choice
+        options: [terraform, kubernetes]
+      artifact_run_id:
+        description: Run ID containing a sanitized cloudtwin-risk-inputs artifact
+        required: false
+        type: string
+      artifact_name:
+        description: Artifact containing current-twin.json and proposed-change.json
+        required: false
+        default: cloudtwin-risk-inputs
+        type: string
+      deployment_risk:
+        description: Explicitly request deployment-risk analysis for a real plan
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
+  pull-requests: read
+  actions: read
 
 concurrency:
   group: cloudtwin-ci-${{ github.workflow }}-${{ github.ref }}
@@ -24,11 +54,15 @@ jobs:
     env:
       AWS_EC2_METADATA_DISABLED: "true"
       PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
       PYTHONPATH: ${{ github.workspace }}/cloudtwin-poc
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -53,6 +87,11 @@ jobs:
 
       - name: Run Python, integration, and Streamlit AppTest suites
         run: python -m pytest cloudtwin-poc -q
+
+      - name: Run integrated S01-S05 and report validation
+        run: |
+          python -m pytest cloudtwin-poc/tests/test_integrated_scenarios.py -q
+          python -m pytest cloudtwin-poc/tests/test_reporting.py -q
 
       - name: Validate JSON schemas and normalized fixture output
         run: |
@@ -85,6 +124,91 @@ jobs:
 
       - name: Run Omar scenario and JSON/YAML validator
         run: python cloudtwin-poc/scripts/validate_scenarios.py
+
+      - name: Download externally supplied risk inputs
+        if: github.event_name == 'workflow_dispatch' && inputs.artifact_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: cloudtwin-ci
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.artifact_run_id }}
+
+      - name: Determine changed files without failing open
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p cloudtwin-ci-artifacts
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            git diff --name-only --diff-filter=ACMR "$BASE_SHA...$HEAD_SHA" > cloudtwin-ci-artifacts/changed-files.txt
+          else
+            : > cloudtwin-ci-artifacts/changed-files.txt
+          fi
+
+      - name: Resolve real risk-gate inputs
+        id: risk-inputs
+        env:
+          INPUT_TWIN: ${{ inputs.current_twin }}
+          INPUT_CHANGE: ${{ inputs.proposed_change }}
+          INPUT_KIND: ${{ inputs.change_kind }}
+          INPUT_DEPLOYMENT_RISK: ${{ inputs.deployment_risk }}
+        run: |
+          twin="${INPUT_TWIN:-cloudtwin-ci/current-twin.json}"
+          if [[ ! -f "$twin" ]]; then twin="cloudtwin-poc/ci/sanitized-current-twin.json"; fi
+          args=(--changed-files cloudtwin-ci-artifacts/changed-files.txt --current-twin "$twin" --github-output "$GITHUB_OUTPUT")
+          if [[ -n "$INPUT_CHANGE" ]]; then args+=(--proposed-change "$INPUT_CHANGE")
+          elif [[ -f cloudtwin-ci/proposed-change.json ]]; then args+=(--proposed-change cloudtwin-ci/proposed-change.json); fi
+          if [[ -n "$INPUT_KIND" ]]; then args+=(--change-kind "$INPUT_KIND"); fi
+          if [[ "${INPUT_DEPLOYMENT_RISK:-false}" == "true" || -n "$INPUT_CHANGE" || -n "$INPUT_KIND" ]]; then
+            args+=(--deployment-risk)
+          fi
+          python cloudtwin-poc/scripts/resolve_ci_risk_inputs.py "${args[@]}"
+
+      - name: Run real CloudTwin PR risk gate at 80
+        if: steps.risk-inputs.outputs.enabled == 'true'
+        run: |
+          python cloudtwin-poc/scripts/ci_risk_gate.py \
+            --twin "${{ steps.risk-inputs.outputs.twin }}" \
+            --change "${{ steps.risk-inputs.outputs.change }}" \
+            --kind "${{ steps.risk-inputs.outputs.kind }}" \
+            --report cloudtwin-ci-artifacts/risk-analysis.json \
+            --fail-at 80
+
+      - name: Upload CloudTwin risk analysis report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudtwin-risk-analysis
+          path: cloudtwin-ci-artifacts/risk-analysis.json
+          if-no-files-found: warn
+
+  upstream-validation:
+    name: Upstream retail application checks
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-env
+      - name: Semantic pull request
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lint changed files
+        run: |
+          git diff --name-only --diff-filter=d origin/${{ github.base_ref }}...HEAD | \
+            yarn lefthook run pre-commit-ci --files-from-stdin
+      - name: Build, test, and validate affected containers
+        run: |
+          yarn nx affected --targets=build --base origin/main --parallel 1
+          yarn nx affected --targets=lint,test:integration,test --base origin/main
+          yarn nx affected --targets=container --exclude='*,!tag:container' --base origin/main
 
   kind-scenarios:
     name: Optional Kind S01/S02
