@@ -175,8 +175,16 @@ def test_cli_fail_at_blocks_a_risky_change(tmp_path):
     path = tmp_path / "ctx.json"
     path.write_text(demo_changes("security_group").model_dump_json(), encoding="utf-8")
     cmd = [sys.executable, "-m", "analysis", str(path), "--fail-at"]
-    blocked = subprocess.run(cmd + ["80"], cwd=POC_ROOT, capture_output=True, text=True)
-    allowed = subprocess.run(cmd + ["81"], cwd=POC_ROOT, capture_output=True, text=True)
+    blocked = subprocess.run(cmd + ["80"], cwd=POC_ROOT, capture_output=True,
+                             text=True, encoding="utf-8")
+    allowed = subprocess.run(cmd + ["81"], cwd=POC_ROOT, capture_output=True,
+                             text=True, encoding="utf-8")
     assert blocked.returncode == 1 and allowed.returncode == 0
     assert json.loads(blocked.stdout)["risk"]["score"] == 80
     assert "= 80/100 → Critique" in blocked.stderr
+from analysis.__main__ import risk_exit_code
+
+
+@pytest.mark.parametrize(("score", "expected"), [(79, 0), (80, 1), (81, 1), (100, 1)])
+def test_fail_at_80_boundary(score, expected):
+    assert risk_exit_code(score, 80) == expected

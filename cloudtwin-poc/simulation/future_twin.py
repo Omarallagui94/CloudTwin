@@ -28,6 +28,10 @@ COMPOSITE_PROPERTIES = {
 }
 
 
+class SimulationError(ValueError):
+    """Raised by the strict compatibility interface for unsafe simulation input."""
+
+
 @dataclass
 class FutureTwin:
     twin: dict[str, Any]                                         # même format que le Current Twin
@@ -140,3 +144,37 @@ def build_future_twin(current_twin: Any, changes: Iterable[Any]) -> FutureTwin:
     if "summary" in twin:
         twin["summary"] = _summary(twin)
     return result
+
+
+def simulate_future_twin(current_twin: dict[str, Any], changes: Iterable[Any]) -> dict[str, Any]:
+    """Backward-compatible strict interface retained for Omar's local UI/reporting.
+
+    The canonical ``build_future_twin`` interface supports every normalized
+    operation. This older interface intentionally accepts only update/delete
+    and rejects stale ``before`` values, matching its established callers.
+    """
+    resources = {resource["id"]: resource for resource in current_twin.get("resources", [])}
+    normalized = sorted((_as_dict(change) for change in changes), key=lambda item: item["change_id"])
+    for change in normalized:
+        operation = change["operation"]
+        if hasattr(operation, "value"):
+            operation = operation.value
+            change["operation"] = operation
+        if operation not in {"update", "delete"}:
+            raise SimulationError(f"Simulation operation {operation!r} is not supported safely by the current contract.")
+        resource = resources.get(change["resource_id"])
+        if resource is None:
+            raise SimulationError(f"Change target is absent from Current Twin: {change['resource_id']}")
+        if operation == "update":
+            path = change.get("property_path")
+            if not path or not path.startswith("properties."):
+                raise SimulationError(f"UPDATE requires a canonical properties.* path, received {path!r}.")
+            actual = _get(resource, path.split("."))
+            if actual is MISSING:
+                raise SimulationError(f"Property path {path!r} does not exist on {change['resource_id']}.")
+            if actual != change.get("before"):
+                raise SimulationError(
+                    f"State conflict for {change['resource_id']}.{path}: ChangeSet expects "
+                    f"{change.get('before')!r}, Current Twin contains {actual!r}."
+                )
+    return build_future_twin(current_twin, normalized).twin

@@ -214,6 +214,10 @@ class EscalationPathRule(Rule):
         # Aucune clé de politique = la collecte ne les a pas lues : inconnu, pas « vide ».
         if not role_props or not any(k in role_props for k in POLICY_KEYS):
             return [], True
+        collection_incomplete = any(
+            role_props.get(key) is False
+            for key in ("attached_policies_complete", "inline_policies_complete")
+        )
         items: list = []
         for key in POLICY_KEYS:
             value = role_props.get(key)
@@ -228,7 +232,7 @@ class EscalationPathRule(Rule):
         statements, unknown = parsed
         reasons = [f"*:* via {d['policy']}" for d in _ADMIN.grants(statements).values()]
         reasons += sorted({f"{d['action']} via {d['policy']}" for d in _SENSITIVE.grants(statements).values()})
-        return reasons, bool(unknown)
+        return reasons, bool(unknown) or collection_incomplete
 
     # ---------------------------------------------------------------- chemins
 

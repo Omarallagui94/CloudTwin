@@ -82,6 +82,8 @@ def _document(item: Any) -> tuple[str, dict | None]:
     if not isinstance(item, dict):
         return "?", None
     label = item.get("arn") or item.get("name") or "?"
+    if item.get("document_available") is False:
+        return label, None
     doc = item.get("document", item.get("policy"))
     if isinstance(doc, str):
         try:

@@ -20,7 +20,14 @@ from analysis.adapters import context_from_poc
 from analysis.engine import load_context, run
 
 
+def risk_exit_code(score: int, fail_at: int) -> int:
+    return 1 if score >= fail_at else 0
+
+
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser(prog="python -m analysis")
     p.add_argument("context", nargs="?", help="contexte d'analyse complet (JSON)")
     p.add_argument("--twin", help="current_state.json produit par discover.py")
@@ -57,7 +64,7 @@ def main() -> int:
     if args.fixes:
         print(summary(report), file=sys.stderr)
     if args.fail_at is not None:
-        return 1 if result.risk["score"] >= args.fail_at else 0
+        return risk_exit_code(result.risk["score"], args.fail_at)
     return 1 if result.summary["fail"] else 0
 
 

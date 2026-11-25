@@ -17,6 +17,7 @@ from ingestion import ChangeIngester
 from integration.hamdi_fatma import context_from_changeset
 from simulation.diff import diff_twins, removed_relationships
 from simulation.future_twin import build_future_twin
+from simulation.affected_resources import analyze_affected_resources
 
 
 def _load(source: Any) -> Any:
@@ -30,7 +31,12 @@ def simulate(current_twin: dict[str, Any] | str | Path, change_source: Any,
     twin = _load(current_twin)
     changeset = ChangeIngester(twin).ingest(change_source, kind=kind)
     future = build_future_twin(twin, changeset)
-    context = context_from_changeset(changeset, twin)
+    state_diff = diff_twins(twin, future.twin)
+    removed = removed_relationships(twin, future.twin)
+    context = context_from_changeset(
+        changeset, twin, future_twin=future.twin, state_diff=state_diff
+    )
+    structural = analyze_affected_resources(state_diff, twin, future.twin, changeset)
     result = run(context)
     return {
         "simulation_id": context.simulation_id,
@@ -42,8 +48,9 @@ def simulate(current_twin: dict[str, Any] | str | Path, change_source: Any,
             "deleted": future.deleted,
             "warnings": future.warnings,
         },
-        "diff": diff_twins(twin, future.twin),
-        "removed_relationships": removed_relationships(twin, future.twin),
+        "diff": state_diff,
+        "removed_relationships": removed,
+        "affected_resources": [resource.model_dump(mode="json") for resource in structural.affected],
         "analysis": result.model_dump(mode="json"),
         "_context": context,     # pour --explain / --fixes, retiré de la sortie JSON
         "_result": result,

@@ -70,7 +70,7 @@ Les règles réseau et IAM lisent les deux sources du jumeau :
 ### RULE-RES-002 — Perte de redondance RDS
 - **Échec** : `multi_az` passe de true à false (HIGH), ou une nouvelle base est créée sans Multi-AZ (MEDIUM).
 - **Ignoré** : les instances membres d'un cluster (Aurora), dont la disponibilité se règle au niveau du cluster.
-- **Limite** : RDS n'est pas encore collecté, et le type `RDS_INSTANCE` reste à ajouter au schéma v1.
+- **Découverte** : `DescribeDBInstances` alimente désormais des ressources `RDS_INSTANCE`; une valeur `multi_az` absente reste inconnue et produit `not_evaluated` lorsqu'une décision est impossible.
 
 ### RULE-RES-003 — Suppression d'une ressource utilisée
 - **Échec** : une ressource supprimée a encore des dépendants qui ne sont pas supprimés eux aussi.

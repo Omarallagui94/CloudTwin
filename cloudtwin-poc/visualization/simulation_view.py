@@ -68,7 +68,7 @@ def impact_graph_html(out: dict[str, Any]) -> str:
     ids = {r["id"] for r in twin["resources"]} | attack_nodes
     for r in twin["resources"]:
         rid = r["id"]
-        base, shape = STYLES.get(r["type"], ("#64748b", "dot"))
+        base, shape, *_ = STYLES.get(r["type"], ("#64748b", "dot"))
         role = ("changed" if rid in changed else "direct" if rid in direct
                 else "indirect" if rid in indirect else None)
         color = HIGHLIGHT[role] if role else base
@@ -164,6 +164,30 @@ def render_diff(out: dict[str, Any]) -> None:
 
 
 def render_impact(out: dict[str, Any]) -> None:
+    affected = out.get("affected_resources", [])
+    st.markdown("### Affected Resources")
+    st.caption("Structural impact from dependency paths; risk interpretation is shown separately by Fatma's analysis.")
+    structural = [item for item in affected if item.get("distance", 0) > 0]
+    if not structural:
+        st.info("No dependent resource is structurally affected. The changed resource remains the only impact.")
+    for item in structural:
+        name = item.get("resource_name") or item["target"].split(":")[-1]
+        relationship_types = item.get("relationship_types", [])
+        path_nodes = item.get("path", [])
+        path_parts: list[str] = []
+        for index, node in enumerate(path_nodes):
+            path_parts.append(node.split(":")[-1])
+            if index < len(relationship_types):
+                path_parts.append(relationship_types[index])
+        with st.container(border=True):
+            st.markdown(f"**{name}**")
+            st.write(f"Impact: {item['impact'].title()} · Distance: {item['distance']}")
+            st.write(item.get("reason") or "Structural dependency path identified.")
+            st.code(" → ".join(path_parts))
+    with st.expander("Technical Details — affected-resource contract"):
+        st.json(affected)
+
+    st.markdown("### Risk interpretation")
     radius = out["analysis"].get("blast_radius") or {}
     cols = st.columns(2)
     cols[0].metric("Impact direct (1 saut)", len(radius.get("direct", [])))
@@ -176,6 +200,23 @@ def render_impact(out: dict[str, Any]) -> None:
         unsafe_allow_html=True,
     )
     components.html(impact_graph_html(out), height=640, scrolling=False)
+
+
+def render_pipeline_status(out: dict[str, Any]) -> None:
+    analysis = out.get("analysis", {})
+    stages = [
+        ("Current Twin", True), ("Change Parsed", True), ("ChangeSet", True),
+        ("Future Twin", bool(out.get("future_twin"))), ("State Diff", bool(out.get("diff"))),
+        ("Affected Resources", "affected_resources" in out),
+        ("Security Analysis", bool(analysis.get("findings"))),
+        ("Resilience Analysis", bool(analysis.get("findings"))),
+        ("Blast Radius", analysis.get("blast_radius") is not None),
+        ("Risk Score", analysis.get("risk") is not None),
+        ("AI Explanation", False),
+    ]
+    st.caption("Pipeline: " + " · ".join(
+        f"{name} — {'COMPLETE' if complete else 'PARTIAL'}" for name, complete in stages
+    ))
 
 
 def render_ai(explanation: dict[str, Any]) -> None:
@@ -243,6 +284,7 @@ def render_simulation(scenario_id: str, scenario_dir: Path) -> None:
         return
     context, result = out.pop("_context"), out.pop("_result")
 
+    render_pipeline_status(out)
     render_score(out["analysis"]["risk"])
     tabs = st.tabs(["Risque", "Diff", "Impact", "Analyste IA", "Correctifs"])
     with tabs[0]:
