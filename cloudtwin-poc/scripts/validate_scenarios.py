@@ -229,6 +229,32 @@ def scan_sensitive_content(validator: Validator) -> None:
         validator.pass_("Sensitive content", "no credentials, keys, account IDs, private keys, or AWS ARNs found")
 
 
+def validate_integrated_pipeline(validator: Validator) -> None:
+    """Run S01-S05 through ingestion, simulation, impact, analysis, and risk."""
+    poc_root = ROOT / "cloudtwin-poc"
+    if str(poc_root) not in sys.path:
+        sys.path.insert(0, str(poc_root))
+    from simulation.pipeline import simulate
+
+    expected_rules = {
+        "S01": set(), "S02": {"RULE-RES-001"}, "S03": {"RULE-NET-004"},
+        "S04": {"RULE-NET-002", "RULE-NET-003"}, "S05": {"RULE-RES-003"},
+    }
+    for scenario_id in sorted(expected_rules):
+        directory = next(SCENARIOS.glob(f"{scenario_id}-*"))
+        try:
+            output = simulate(directory / "current-twin.json", directory / "scenario.json")
+            failures = {finding["rule_id"] for finding in output["analysis"]["findings"]
+                        if finding["status"] == "fail"}
+            assert failures == expected_rules[scenario_id]
+            assert output["diff"]["changes"] and output["affected_resources"]
+            assert "score" in output["analysis"]["risk"]
+        except Exception as exc:
+            validator.fail("Integrated pipeline", f"{scenario_id}: {exc}")
+        else:
+            validator.pass_("Integrated pipeline", f"{scenario_id}: findings={sorted(failures)}")
+
+
 def terraform_executable() -> str | None:
     executable = shutil.which("terraform")
     if not executable and os.name == "nt":
@@ -323,6 +349,7 @@ def main() -> int:
     validator = Validator()
     validate_scenarios(validator)
     scan_sensitive_content(validator)
+    validate_integrated_pipeline(validator)
     validate_terraform(validator)
     return print_summary(validator)
 

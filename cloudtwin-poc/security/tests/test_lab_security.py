@@ -117,6 +117,20 @@ def test_kubernetes_reader_is_read_only_and_never_reads_secrets():
     assert binding["roleRef"]["name"] == role["metadata"]["name"]
 
 
+def test_collector_security_is_defined_in_terraform_but_opt_in():
+    config = (REPO / "terraform/eks/minimal/collector-security.tf").read_text(encoding="utf-8")
+    variables = (REPO / "terraform/eks/minimal/variables.tf").read_text(encoding="utf-8")
+    assert 'resource "aws_iam_role" "cloudtwin_collector"' in config
+    assert 'resource "kubernetes_cluster_role_v1" "cloudtwin_collector"' in config
+    eks_module = (REPO / "terraform/lib/eks/eks.tf").read_text(encoding="utf-8")
+    assert "manage_aws_auth_configmap" in eks_module
+    assert 'groups   = ["cloudtwin-rbac-readers"]' in eks_module
+    assert 'default     = false' in variables
+    assert "secrets" not in config.lower()
+    for forbidden in ('verbs      = ["*"]', 'resources  = ["*"]'):
+        assert forbidden not in config
+
+
 # ------------------------------------------------------------ secrets / Git
 
 SECRET_PATTERNS = {

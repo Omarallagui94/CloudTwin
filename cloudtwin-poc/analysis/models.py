@@ -106,12 +106,17 @@ class AffectedResource(BaseModel):
     change_id: str
     source: str
     target: str
+    resource_id: str | None = None
+    resource_name: str | None = None
     relationship: str
     direction: Literal["incoming", "outgoing"]
     distance: int
     impact: Literal["direct", "indirect"]
     path: list[str]
+    relationship_types: list[str] = Field(default_factory=list)
     reason: str | None = None
+    confidence: Literal["high", "medium", "low"] = "high"
+    data_complete: bool = True
 
 
 class AnalysisContext(BaseModel):

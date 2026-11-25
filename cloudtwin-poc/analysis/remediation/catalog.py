@@ -119,6 +119,47 @@ def _fix_service(change: Change, finding: Finding, ctx: AnalysisContext) -> tupl
     return None
 
 
+# ------------------------------------------------------------- Kubernetes
+
+def _unprivilege(containers: Any) -> Any:
+    """Les conteneurs sans `privileged: true` (formats manifest et découverte)."""
+    out = copy.deepcopy(containers)
+    for c in out if isinstance(out, list) else []:
+        for key in ("securityContext", "security_context"):
+            if isinstance(c, dict) and isinstance(c.get(key), dict) and c[key].get("privileged") is True:
+                c[key]["privileged"] = False
+    return out
+
+
+def _fix_k8s(change: Change, finding: Finding, ctx: AnalysisContext) -> tuple[Any, str] | None:
+    rid, path = change.resource_id, change.property_path
+    if change.resource_type.upper() == "CLUSTER_ROLE_BINDING":
+        return REVERT, f"Ne pas lier cluster-admin à un ServiceAccount ({rid}) : utiliser un Role limité"
+    became_admin = (finding.evidence.get("cluster_admin") or {}).get("after") is True
+    if path == "properties.service_account":
+        return REVERT, f"Garder le ServiceAccount d'origine pour {rid}"
+    if path in ("properties.containers", "properties.init_containers"):
+        return _unprivilege(change.after), f"Retirer privileged: true des conteneurs de {rid}"
+    if path == "properties.spec" and isinstance(change.after, dict):
+        after = copy.deepcopy(change.after)
+        pod = after.get("template", {}).get("spec") if isinstance(after.get("template"), dict) else after
+        if not isinstance(pod, dict):
+            return None
+        for key in ("containers", "initContainers", "ephemeralContainers"):
+            if key in pod:
+                pod[key] = _unprivilege(pod[key])
+        what = "Retirer privileged: true"
+        old_sa = (finding.evidence.get("service_account") or {}).get("before")
+        if became_admin:
+            if old_sa:
+                pod["serviceAccountName"] = old_sa.split(":", 1)[-1]
+            else:
+                pod.pop("serviceAccountName", None)
+            what += " et garder un ServiceAccount sans cluster-admin"
+        return after, f"{what} pour {rid}"
+    return None
+
+
 # -------------------------------------------------------------------- IAM
 
 _ADMIN, _SENSITIVE = FullAdminPolicyRule(), SensitivePermissionRule()
@@ -189,6 +230,7 @@ FIXERS: dict[str, Callable[[Change, Finding, AnalysisContext], tuple[Any, str] |
     "RULE-RES-003": _fix_delete,
     "RULE-IAM-001": _fix_iam,
     "RULE-IAM-002": _fix_iam,
+    "RULE-K8S-001": _fix_k8s,
     # RULE-IAM-003 n'a pas de correctif propre : on coupe le chemin en corrigeant un maillon.
 }
 

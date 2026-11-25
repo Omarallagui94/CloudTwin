@@ -26,6 +26,7 @@ CLOUDTWIN_LLM=ollama python -m analysis contexte.json --fixes   # + propositions
 | RES-002 | Garder Multi-AZ activé |
 | RES-003 | Annuler la suppression |
 | IAM-001, IAM-002 | Retirer les déclarations `*:*` ou d'escalade, et garder les autres ; retirer AdministratorAccess ou IAMFullAccess |
+| K8S-001 | Retirer `privileged: true` des conteneurs et garder l'ancien ServiceAccount ; annuler un ClusterRoleBinding vers `cluster-admin` |
 | IAM-003 | Pas de correctif propre : on coupe le chemin en corrigeant l'un de ses maillons |
 
 ## Exemple : le scénario de démo

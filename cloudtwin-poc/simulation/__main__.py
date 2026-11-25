@@ -16,6 +16,10 @@ from simulation.pipeline import simulate
 
 
 def main() -> int:
+    # Windows often inherits a legacy cp1252 console. The JSON contracts and
+    # human summaries contain Unicode, so make CLI output deterministic too.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser(prog="python -m simulation")
     p.add_argument("--twin", required=True, help="Current Twin (JSON)")
     p.add_argument("--change", required=True, help="tfplan.json, manifest YAML ou scénario JSON")

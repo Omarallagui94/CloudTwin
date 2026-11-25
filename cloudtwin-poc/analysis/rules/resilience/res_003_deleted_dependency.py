@@ -23,6 +23,7 @@ from analysis.rules.base import Rule
 # "none"   -> relation connue, mais pas une dépendance de disponibilité
 DEPENDENCY_DIRECTION: dict[str, str] = {
     "CONTAINS": "target",    # VPC→Subnet, EKS→NodeGroup, Namespace→Deployment
+    "DEPENDS_ON": "source",  # Deployment→Service
     "LOCATED_IN": "source",  # EC2/LB/EKS→Subnet ou VPC
     "USES": "source",        # EC2→SecurityGroup, Pod→ServiceAccount, EKS→IAMRole
     "MEMBER_OF": "source",   # EC2→NodeGroup
