@@ -1,0 +1,104 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.0",
+  "planned_values": {
+    "root_module": {}
+  },
+  "resource_changes": [
+    {
+      "address": "module.vpc.aws_subnet.public_a",
+      "module_address": "module.vpc",
+      "mode": "managed",
+      "type": "aws_subnet",
+      "name": "public_a",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {
+          "id": "subnet-0aaa1111aaaa0001a",
+          "cidr_block": "10.0.1.0/24",
+          "vpc_id": "vpc-0aaa1111bbbb2222c",
+          "tags": {
+            "Name": "retail-store-public-a"
+          }
+        },
+        "after": {
+          "id": "subnet-0aaa1111aaaa0001a",
+          "cidr_block": "10.0.10.0/24",
+          "vpc_id": "vpc-0aaa1111bbbb2222c",
+          "tags": {
+            "Name": "retail-store-public-a"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_security_group.allow_telemetry",
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "allow_telemetry",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "retail-store-allow-telemetry",
+          "description": "Allow telemetry scrape traffic",
+          "vpc_id": "vpc-0aaa1111bbbb2222c",
+          "tags": {
+            "Name": "retail-store-allow-telemetry"
+          }
+        },
+        "after_unknown": {
+          "id": true
+        }
+      }
+    },
+    {
+      "address": "aws_security_group.legacy_dev_access",
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "legacy_dev_access",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": {
+          "id": "sg-0aaa1111cccc0002b",
+          "name": "retail-store-node-sg",
+          "vpc_id": "vpc-0aaa1111bbbb2222c"
+        },
+        "after": null,
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.compute.aws_instance.worker_1",
+      "module_address": "module.compute",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "worker_1",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": {
+          "id": "i-0aaa1111dddd0001a",
+          "instance_type": "t3.medium",
+          "tags": {
+            "Name": "retail-store-worker-1"
+          }
+        },
+        "after": {
+          "instance_type": "t3.small",
+          "tags": {
+            "Name": "retail-store-worker-1"
+          }
+        },
+        "after_unknown": {
+          "id": true
+        }
+      }
+    }
+  ]
+}
+
