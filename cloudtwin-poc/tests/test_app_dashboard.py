@@ -214,6 +214,20 @@ def test_sidebar_hides_aws_fields_in_fixture_mode_and_recalls_the_last_run():
     assert {t.label for t in app.text_input} >= {"AWS Region", "EKS Cluster"}
 
 
+def test_live_mode_simulates_a_synthetic_scenario_on_its_demo_twin():
+    """S04 vise un Security Group synthétique, absent du vrai lab : pas d'échec, une note."""
+    app = AppTest.from_file(APP_PATH, default_timeout=15).run()
+    app.session_state["twin"] = {"resources": [], "relationships": []}   # lab Live sans ce SG
+    app.radio[1].set_value("Live AWS Mode").run()
+    app.radio[0].set_value("Analysis").run()
+    app.get("button_group")[0].set_value("S04").run()
+    assert not app.exception
+    assert not app.error
+    assert any("sg-fixture-orders-db n'existe pas dans le lab Live" in i.value for i in app.info)
+    mirror = next(m.value for m in app.markdown if 'class="mirror"' in m.value)
+    assert '<span class="num">30</span>' in mirror
+
+
 # ------------------------------------------------------------- Infrastructure
 
 def test_infrastructure_shows_the_reference_lab_without_any_change():

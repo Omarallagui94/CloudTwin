@@ -531,7 +531,30 @@ def render_current_twin(mode: str) -> None:
     st.caption("Select a node to highlight its direct relationships. Click empty space to restore the full projection.")
 
 
-def set_pending_change(scenario: dict[str, Any], twin: dict[str, Any], origin: str) -> None:
+def twin_for_scenario(scenario_id: str, scenario: dict[str, Any], mode: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Jumeau sur lequel simuler un scénario de démonstration, et une note si on a dû changer.
+
+    En Live, on simule sur le jumeau découvert si la ressource visée y existe. Sinon (S04 vise
+    un Security Group synthétique, absent du vrai lab), on simule sur le jumeau de
+    démonstration du scénario au lieu d'échouer, et on le dit.
+    """
+    if mode == "Local Fixture Mode":
+        return fixture_for_scenario(scenario_id), None
+    twin = current_twin_for(scenario, mode)
+    target = scenario.get("target_resource")
+    if twin and any(r.get("id") == target for r in twin.get("resources", [])):
+        return twin, None
+    fixture = fixture_for_scenario(scenario_id)
+    if fixture is None:
+        return twin, None
+    name = str(target).rsplit(":", 1)[-1]
+    return fixture, (f"La ressource {name} n'existe pas dans le lab Live : {scenario_id} est simulé "
+                     "sur son jumeau de démonstration. Rien n'est lu ni modifié sur AWS pour ce scénario.")
+
+
+def set_pending_change(scenario: dict[str, Any], twin: dict[str, Any], origin: str,
+                       note: str | None = None) -> None:
+    st.session_state.scenario_twin_note = note
     st.session_state.pending_scenario = scenario
     st.session_state.pending_twin = twin
     st.session_state.pending_origin = origin
@@ -866,16 +889,16 @@ def render_change_assistant(mode: str, region: str, cluster_name: str) -> None:
         for column, (label, scenario_id) in zip(columns, SUGGESTIONS.items()):
             with column:
                 if st.button(label, key=f"suggest-{scenario_id}", use_container_width=True):
-                    twin = fixture_for_scenario(scenario_id) if mode == "Local Fixture Mode" else current_twin_for(available[scenario_id], mode)
+                    twin, note = twin_for_scenario(scenario_id, available[scenario_id], mode)
                     if twin:
-                        set_pending_change(available[scenario_id], twin, scenario_id)
+                        set_pending_change(available[scenario_id], twin, scenario_id, note)
                     else:
                         st.session_state.confirmation_error = "The selected target is not available in the active Current Twin."
         selected_id = st.selectbox("Scenario pack", list(available), format_func=lambda sid: f"{sid} — {available[sid]['name']}")
         if st.button("Prepare selected scenario", use_container_width=True):
-            twin = fixture_for_scenario(selected_id) if mode == "Local Fixture Mode" else current_twin_for(available[selected_id], mode)
+            twin, note = twin_for_scenario(selected_id, available[selected_id], mode)
             if twin:
-                set_pending_change(available[selected_id], twin, selected_id)
+                set_pending_change(available[selected_id], twin, selected_id, note)
             else:
                 st.session_state.confirmation_error = "The selected target is not available in the active Current Twin."
     with tabs[1]:
@@ -897,6 +920,8 @@ def render_change_assistant(mode: str, region: str, cluster_name: str) -> None:
     scenario = st.session_state.get("pending_scenario")
     if scenario:
         render_proposal(scenario)
+        if st.session_state.get("scenario_twin_note"):
+            st.info(st.session_state.scenario_twin_note)
         confirm, cancel = st.columns(2)
         with confirm:
             if st.button("Confirm for Analysis", type="primary", use_container_width=True):
@@ -1020,11 +1045,11 @@ def load_scenario_for_analysis(mode: str) -> None:
     scenario = scenarios().get(scenario_id)
     if scenario is None:
         return
-    twin = fixture_for_scenario(scenario_id) if mode == "Local Fixture Mode" else current_twin_for(scenario, mode)
+    twin, note = twin_for_scenario(scenario_id, scenario, mode)
     if twin is None:
         st.session_state.confirmation_error = "Aucun Current Twin disponible : lance d'abord la découverte."
         return
-    set_pending_change(scenario, twin, scenario_id)
+    set_pending_change(scenario, twin, scenario_id, note)
     confirm_pending_change()
 
 
@@ -1069,6 +1094,8 @@ def render_analysis(mode: str, region: str, cluster_name: str) -> None:
         render_scenario_switch(mode)
     st.markdown(f'<div class="change-chip">{html.escape(ui.change_line(changeset, names))}</div>',
                 unsafe_allow_html=True)
+    if st.session_state.get("scenario_twin_note"):
+        st.info(st.session_state.scenario_twin_note)
     st.markdown(ui.mirror(current, st.session_state["future_twin"], changeset, result), unsafe_allow_html=True)
     for warning in st.session_state.get("simulation_warnings") or []:
         st.caption(f"Simulation : {warning}")
