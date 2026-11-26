@@ -1,6 +1,12 @@
-name: Upstream Retail Store E2E (manual)
+name: E2E Test
 
 on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions: {}

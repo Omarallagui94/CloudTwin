@@ -8,13 +8,15 @@ These tests validate normalization consistency, not live cloud discovery.
 from __future__ import annotations
 
 import json
+import sys
 import unittest
 from pathlib import Path
 
-from discovery.normalizer import normalize
-
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from discovery.normalizer import normalize
 
 INPUT_FIXTURE = ROOT / "fixtures" / "sample_discovery_input.json"
 BASELINE_SNAPSHOT = ROOT / "fixtures" / "sample_current_state_baseline.json"

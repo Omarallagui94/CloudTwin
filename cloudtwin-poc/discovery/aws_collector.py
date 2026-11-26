@@ -25,7 +25,6 @@ class AWSCollector:
         self.elbv2 = self.session.client("elbv2", config=config)
         self.elb = self.session.client("elb", config=config)
         self.iam = self.session.client("iam", config=config)
-        self.rds = self.session.client("rds", config=config)
         self.warnings: list[str] = []
 
     def _safe(self, label: str, operation: Callable[[], list[dict[str, Any]]]) -> list[dict[str, Any]]:
@@ -65,7 +64,7 @@ class AWSCollector:
             return result
         return self._safe("Subnet discovery", operation)
 
-
+    
     def collect_security_groups(self) -> list[dict[str, Any]]:
         def operation() -> list[dict[str, Any]]:
             result = []
@@ -171,42 +170,7 @@ class AWSCollector:
             return result
         return self._safe("Load Balancer discovery", operation)
 
-    def collect_rds_instances(self) -> list[dict[str, Any]]:
-        """Collect RDS DB instances without inventing defaults for absent fields."""
-        def operation() -> list[dict[str, Any]]:
-            result = []
-            paginator = self.rds.get_paginator("describe_db_instances")
-            for item in paginator.paginate().search("DBInstances[]"):
-                subnet_group = item.get("DBSubnetGroup") or {}
-                result.append({
-                    "db_instance_identifier": item["DBInstanceIdentifier"],
-                    "db_instance_arn": item.get("DBInstanceArn"),
-                    "engine": item.get("Engine"),
-                    "engine_version": item.get("EngineVersion"),
-                    "db_instance_class": item.get("DBInstanceClass"),
-                    "multi_az": item.get("MultiAZ"),
-                    "publicly_accessible": item.get("PubliclyAccessible"),
-                    "db_subnet_group": subnet_group.get("DBSubnetGroupName"),
-                    "vpc_id": subnet_group.get("VpcId"),
-                    "subnet_ids": [
-                        subnet.get("SubnetIdentifier")
-                        for subnet in subnet_group.get("Subnets", [])
-                        if subnet.get("SubnetIdentifier")
-                    ],
-                    "security_group_ids": [
-                        group["VpcSecurityGroupId"]
-                        for group in item.get("VpcSecurityGroups", [])
-                        if group.get("VpcSecurityGroupId")
-                    ],
-                    "availability_zone": item.get("AvailabilityZone"),
-                    "storage_encrypted": item.get("StorageEncrypted"),
-                    "kms_key_id": item.get("KmsKeyId"),
-                    "db_cluster_identifier": item.get("DBClusterIdentifier"),
-                })
-            return result
-        return self._safe("RDS instance discovery", operation)
-
-
+    
     def collect_roles(self) -> list[dict[str, Any]]:
         def operation() -> list[dict[str, Any]]:
             result = []
@@ -221,8 +185,6 @@ class AWSCollector:
                     "max_session_duration": role.get("MaxSessionDuration"),
                     "attached_policies": [],
                     "inline_policies": [],
-                    "attached_policies_complete": True,
-                    "inline_policies_complete": True,
                 }
 
                 role_name = role["RoleName"]
@@ -253,9 +215,6 @@ class AWSCollector:
                                 "Document", {}
                             )
                         except (ClientError, BotoCoreError, KeyError) as exc:
-                            policy_data["document"] = None
-                            policy_data["document_available"] = False
-                            policy_data["document_error"] = type(exc).__name__
                             self.warnings.append(
                                 f"IAM managed policy {policy['PolicyArn']}: {exc}"
                             )
@@ -263,7 +222,6 @@ class AWSCollector:
                         role_data["attached_policies"].append(policy_data)
 
                 except (ClientError, BotoCoreError) as exc:
-                    role_data["attached_policies_complete"] = False
                     self.warnings.append(
                         f"IAM attached policies for role {role_name}: {exc}"
                     )
@@ -282,9 +240,6 @@ class AWSCollector:
                                 PolicyName=policy_name,
                             ).get("PolicyDocument", {})
                         except (ClientError, BotoCoreError) as exc:
-                            policy_data["document"] = None
-                            policy_data["document_available"] = False
-                            policy_data["document_error"] = type(exc).__name__
                             self.warnings.append(
                                 f"IAM inline policy {role_name}/{policy_name}: {exc}"
                             )
@@ -292,7 +247,6 @@ class AWSCollector:
                         role_data["inline_policies"].append(policy_data)
 
                 except (ClientError, BotoCoreError) as exc:
-                    role_data["inline_policies_complete"] = False
                     self.warnings.append(
                         f"IAM inline policies for role {role_name}: {exc}"
                     )
@@ -310,7 +264,6 @@ class AWSCollector:
             "vpcs": self.collect_vpcs(), "subnets": self.collect_subnets(),
             "security_groups": self.collect_security_groups(), "instances": self.collect_instances(),
             "clusters": clusters, "nodegroups": self.collect_nodegroups(clusters),
-            "load_balancers": self.collect_load_balancers(),
-            "rds_instances": self.collect_rds_instances(), "iam_roles": self.collect_roles(),
+            "load_balancers": self.collect_load_balancers(), "iam_roles": self.collect_roles(),
             "warnings": self.warnings,
         }

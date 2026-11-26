@@ -71,7 +71,6 @@
         "EKS_NODE_GROUP",
         "LOAD_BALANCER",
         "IAM_ROLE",
-        "RDS_INSTANCE",
         "NAMESPACE",
         "NODE",
         "DEPLOYMENT",
@@ -80,11 +79,9 @@
         "STATEFUL_SET",
         "SERVICE_ACCOUNT",
         "INGRESS",
-        "NETWORK_POLICY",
-        "CLUSTER_ROLE",
-        "CLUSTER_ROLE_BINDING"
+        "NETWORK_POLICY"
       ],
-      "description": "Closed set of recognized AWS and Kubernetes resource types, including RDS instances and cluster-scoped RBAC resources."
+      "description": "Closed set of recognized resource types. AWS types: INTERNET through IAM_ROLE. Kubernetes types: NAMESPACE through NETWORK_POLICY."
     },
 
     "Provider": {
@@ -103,8 +100,8 @@
         "aws:ec2:i-0aaa1111dddd0001a",
         "aws:subnet:subnet-0aaa1111aaaa0001a",
         "aws:security-group:sg-0aaa1111cccc0001a",
-        "aws:load-balancer:fixture-retail-store-nlb",
-        "aws:iam-role:fixture-retail-store-cluster-role",
+        "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001",
+        "aws:iam-role:arn:aws:iam::000000000000:role/retail-store-cluster-role",
         "aws:internet",
         "k8s:namespace:default",
         "k8s:node:ip-10-0-10-51.eu-west-3.compute.internal",

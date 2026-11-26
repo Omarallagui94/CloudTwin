@@ -1,116 +1,203 @@
-"""Professor-demo-ready, read-only Streamlit dashboard for CloudTwin."""
+"""Streamlit dashboard for the read-only CloudTwin proof of concept.
+
+Supports two operating modes:
+
+1. **Live AWS Mode** – uses boto3 credentials, tests AWS/EKS/Kubernetes
+   connections and runs real infrastructure discovery.
+2. **Local Fixture Mode** – loads a sanitized Current Twin fixture from
+   ``fixtures/`` without calling any AWS or Kubernetes APIs.  This is the
+   default when AWS credentials are unavailable, allowing local development
+   of Future Twin, Diff, and graph integration without cloud access.
+"""
 
 from __future__ import annotations
 
 import json
-import html
 from pathlib import Path
 from typing import Any
 
-import boto3
 import streamlit as st
 import streamlit.components.v1 as components
-from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ClientError
-from kubernetes import client, config
-from kubernetes.client.exceptions import ApiException
-
-from analysis.engine import run as run_analysis
-from ai_analyst import explain as explain_analysis
-from change_assistant import UnsupportedChangeRequest, parse_change_request
-from discovery.aws_collector import AWSCollector
-from discovery.kubernetes_collector import KubernetesCollector
-from discovery.normalizer import normalize
-from ingestion import ChangeIngester, IngestionError
-from integration.hamdi_fatma import context_from_changeset
-from integration.scenario_compat import CompatibilityError, discover_scenarios
-from reporting import build_simulation_report
-from simulation import (
-    SimulationError, analyze_affected_resources, build_future_twin, calculate_state_diff,
-    simulate_future_twin,
-)
-from analysis.models import AnalysisContext
-from ai_analyst.fixes import remediate_with_ai
-from visualization.simulation_view import (
-    ATTACK_EDGE, HIGHLIGHT, impact_graph_html, llm_client, render_ai, render_fixes,
-    render_llm_settings,
-)
-from visualization.build_graph import (
-    allowed_types, build_graph, legend_items, project_diff, project_twin, readable_label,
-)
 
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "outputs" / "current_state.json"
 GRAPH_PATH = ROOT / "outputs" / "current_twin.html"
-DIFF_GRAPH_PATH = ROOT / "outputs" / "diff_twin.html"
-CURRENT_COMPARE_PATH = ROOT / "outputs" / "simulation_current.html"
-FUTURE_COMPARE_PATH = ROOT / "outputs" / "simulation_future.html"
-SCENARIOS_PATH = ROOT / "scenarios"
+SCENARIO_PATH = ROOT / "scenarios" / "scenario-01.json"
+FIXTURE_PATH = ROOT / "fixtures" / "sample_current_state.json"
 
-PAGES = ["Overview", "Infrastructure", "Current Twin", "Change Assistant", "Analysis"]
-STATUS_ITEMS = [
-    ("AWS/EKS Discovery", "READY", "ready"),
-    ("Kubernetes Discovery", "READY", "ready"),
-    ("Current Twin", "READY", "ready"),
-    ("Change Ingestion", "READY", "ready"),
-    ("Affected Resources", "READY", "ready"),
-    ("Resilience Analysis", "READY", "ready"),
-    ("Future Twin", "READY", "ready"),
-    ("State Diff", "READY", "ready"),
-    ("Security Analysis", "READY", "ready"),
-    ("Blast Radius", "READY", "ready"),
-    ("Risk Scoring", "READY", "ready"),
-    ("AI Explanation", "READY", "ready"),
-]
-SUGGESTIONS = {
-    "Scale UI Up": "S01",
-    "Scale UI Down": "S02",
-    "Expose Service Publicly": "S03",
-    "Open Security Group": "S04",
-    "Remove Critical Dependency": "S05",
-}
-GRAPH_VIEWS = ["Application View", "Kubernetes View", "AWS Infrastructure View", "Full Infrastructure"]
+# ---------------------------------------------------------------------------
+# Mode helpers
+# ---------------------------------------------------------------------------
 
+_CREDENTIAL_HINTS = (
+    "unable to locate credentials",
+    "no credentials",
+    "expired token",
+    "invalidclienttokenid",
+    "credential",
+)
+
+
+def _is_credential_error(exc: Exception) -> bool:
+    """Return True when *exc* looks like a missing/invalid-credential error."""
+    msg = str(exc).lower()
+    return any(hint in msg for hint in _CREDENTIAL_HINTS)
+
+
+def detect_aws_credentials() -> bool:
+    """Return True when boto3 can resolve credentials without making an API call."""
+    try:
+        import boto3  # noqa: delay import so Local Fixture Mode never needs boto3 installed
+        session = boto3.Session()
+        creds = session.get_credentials()
+        return creds is not None
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Page configuration & styles
+# ---------------------------------------------------------------------------
 
 def configure_page() -> None:
-    st.set_page_config(page_title="CloudTwin AI", page_icon="☁️", layout="wide")
+    st.set_page_config(page_title="CloudTwin AI", page_icon="CT", layout="wide")
     st.markdown(
         """
         <style>
-        .stApp { background: #f7f9fc; color: #172033; }
-        .block-container { max-width: 1450px; padding-top: 1.7rem; padding-bottom: 3rem; }
-        [data-testid="stSidebar"] { background: #0f172a; }
-        [data-testid="stSidebar"] * { color: #e2e8f0; }
-        .hero { padding: 2rem; border-radius: 18px; color: white; background: linear-gradient(125deg,#0f172a,#164e63); box-shadow: 0 12px 32px rgba(15,23,42,.16); }
-        .hero h1 { margin: 0; font-size: 2.45rem; letter-spacing: -.03em; }
-        .hero p { margin: .45rem 0 0; color: #bae6fd; font-size: 1.12rem; }
-        .eyebrow { font-size: .76rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 750; color: #64748b; }
-        .card { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1rem 1.1rem; box-shadow: 0 3px 12px rgba(15,23,42,.045); min-height: 96px; }
-        .metric-value { font-size: 1.65rem; font-weight: 760; color: #0f172a; margin-top: .3rem; }
-        .status-row { background: white; border: 1px solid #e2e8f0; border-radius: 11px; padding: .8rem 1rem; margin: .45rem 0; display: flex; justify-content: space-between; align-items: center; }
-        .badge { border-radius: 999px; padding: .23rem .62rem; font-size: .72rem; font-weight: 760; }
-        .ready { background:#dcfce7; color:#166534; } .partial { background:#fef3c7; color:#92400e; } .future { background:#e2e8f0; color:#475569; }
-        .flow { display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; margin:1rem 0; }
-        .flow-step { background:white; border:1px solid #cbd5e1; border-radius:10px; padding:.65rem .8rem; font-weight:680; color:#1e293b; }
-        .flow-arrow { color:#94a3b8; font-weight:800; }
-        .proposal { background:#fff; border:1px solid #cbd5e1; border-left:5px solid #0e7490; border-radius:12px; padding:1.1rem 1.25rem; }
-        .safe-note { background:#ecfeff; border:1px solid #a5f3fc; color:#155e75; border-radius:10px; padding:.75rem 1rem; }
-        .pipeline-done { color:#166534; font-weight:700; } .pipeline-next { color:#64748b; }
-        .sim-card { background:white; border:1px solid #dbe3ee; border-radius:14px; padding:1rem 1.1rem; min-height:105px; }
-        .sim-card strong { color:#0f172a; font-size:1.05rem; }
-        .sim-id { color:#64748b; font-size:.72rem; margin-top:.35rem; overflow-wrap:anywhere; }
-        .sim-value { font-size:1.65rem; font-weight:780; color:#0f172a; margin:.35rem 0; }
-        .sim-future { border-top:4px solid #0e7490; } .sim-removed { border-top:4px solid #b91c1c; opacity:.78; }
-        .sim-removed strong { text-decoration:line-through; }
-        .diff-stat { background:white; border:1px solid #e2e8f0; border-radius:12px; padding:.75rem 1rem; }
-        .diff-stat.active { border-color:#94a3b8; box-shadow:0 3px 10px rgba(15,23,42,.07); }
-        .diff-number { font-size:1.55rem; font-weight:780; color:#64748b; } .diff-stat.active .diff-number { color:#0f172a; }
-        .relationship-card { background:white; border-left:4px solid #b91c1c; border-radius:10px; padding:.8rem 1rem; margin:.55rem 0; }
+        .stApp { background: #f6f8fc; }
+        .block-container { max-width: 1500px; padding-top: 2rem; }
+        .hero {
+            padding: 1.5rem 1.75rem; border-radius: 16px; color: white;
+            background: linear-gradient(120deg, #0f172a 0%, #0f4c81 55%, #0369a1 100%);
+            box-shadow: 0 10px 30px rgba(15, 23, 42, .14); margin-bottom: 1.5rem;
+        }
+        .hero h1 { margin: 0; font-size: 2.2rem; }
+        .hero p { margin: .35rem 0 0; color: #dbeafe; font-size: 1.05rem; }
+        .status-card {
+            padding: .75rem 1rem; margin: .45rem 0; border: 1px solid #bbf7d0;
+            border-radius: 10px; background: #f0fdf4; color: #166534; font-weight: 650;
+        }
+        .metric-card {
+            padding: 1rem 1.1rem; min-height: 105px; border: 1px solid #dbe3ef;
+            border-radius: 12px; background: white; box-shadow: 0 3px 12px rgba(15, 23, 42, .05);
+        }
+        .metric-label { color: #64748b; font-size: .86rem; }
+        .metric-value { color: #0f172a; font-size: 1.75rem; font-weight: 750; margin-top: .25rem; }
+        .proposal {
+            padding: 1rem 1.25rem; border-left: 5px solid #f59e0b;
+            border-radius: 10px; background: #fffbeb; color: #78350f;
+        }
+        .mode-badge {
+            display: inline-block; padding: .25rem .7rem; border-radius: 6px;
+            font-size: .82rem; font-weight: 700; margin-bottom: .5rem;
+        }
+        .mode-live { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+        .mode-local { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
+
+# ---------------------------------------------------------------------------
+# Live AWS Mode helpers (imports deferred so fixture mode works without deps)
+# ---------------------------------------------------------------------------
+
+def test_connections(region: str, cluster_name: str) -> dict[str, dict[str, Any]]:
+    """Test read-only AWS, EKS, and Kubernetes access independently."""
+    import boto3
+    from botocore.config import Config
+    from botocore.exceptions import BotoCoreError, ClientError
+    from kubernetes import client, config
+    from kubernetes.client.exceptions import ApiException
+
+    result: dict[str, dict[str, Any]] = {}
+    sdk_config = Config(retries={"total_max_attempts": 2, "mode": "standard"}, connect_timeout=5, read_timeout=15)
+    session = boto3.Session(region_name=region)
+
+    try:
+        identity = session.client("sts", config=sdk_config).get_caller_identity()
+        result["aws"] = {"ok": True, "detail": f"Account {identity['Account']}"}
+    except (ClientError, BotoCoreError) as exc:
+        result["aws"] = {"ok": False, "detail": str(exc)}
+
+    try:
+        cluster = session.client("eks", config=sdk_config).describe_cluster(name=cluster_name)["cluster"]
+        result["eks"] = {"ok": True, "detail": f"{cluster['name']} ({cluster['status']})"}
+    except (ClientError, BotoCoreError) as exc:
+        result["eks"] = {"ok": False, "detail": str(exc)}
+
+    try:
+        config.load_kube_config()
+        version = client.VersionApi().get_code()
+        result["kubernetes"] = {"ok": True, "detail": f"API {version.git_version}"}
+    except (ApiException, OSError, ValueError, config.ConfigException) as exc:
+        result["kubernetes"] = {"ok": False, "detail": str(exc)}
+    return result
+
+
+def run_discovery(region: str, cluster_name: str) -> tuple[dict[str, Any], list[str]]:
+    """Run the existing collectors and write a fresh normalized Current Twin."""
+    from discovery.aws_collector import AWSCollector
+    from discovery.kubernetes_collector import KubernetesCollector
+    from discovery.normalizer import normalize
+    from visualization.build_graph import main as build_graph
+
+    warnings: list[str] = []
+    progress = st.status("Discovering infrastructure...", expanded=True)
+    try:
+        progress.write("Discovering AWS...")
+        aws = AWSCollector(region).collect()
+        warnings.extend(aws.get("warnings", []))
+
+        progress.write("Discovering Kubernetes...")
+        kubernetes = KubernetesCollector().collect()
+        warnings.extend(kubernetes.get("warnings", []))
+
+        progress.write("Building relationships...")
+        twin = normalize(aws, kubernetes, region, cluster_name)
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(json.dumps(twin, indent=2), encoding="utf-8")
+
+        progress.write("Generating Current Twin...")
+        if build_graph() != 0:
+            raise RuntimeError("The graph builder did not complete successfully.")
+        progress.update(label="Current Twin generated", state="complete", expanded=False)
+        return twin, warnings
+    except Exception:
+        progress.update(label="Discovery failed", state="error", expanded=True)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Local Fixture Mode helpers
+# ---------------------------------------------------------------------------
+
+def load_fixture() -> dict[str, Any] | None:
+    """Load the sample Current Twin fixture shipped with the repository.
+
+    Also writes it to ``outputs/current_state.json`` so that the graph builder
+    and any downstream Future Twin / Diff logic find the file in the usual
+    location.
+    """
+    fixture = load_json(FIXTURE_PATH)
+    if fixture is None:
+        return None
+    # Persist to the standard outputs path so build_graph and other tools work.
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STATE_PATH.write_text(json.dumps(fixture, indent=2), encoding="utf-8")
+    # Attempt to generate the interactive graph from the fixture.
+    try:
+        from visualization.build_graph import main as build_graph
+        build_graph()
+    except Exception:
+        pass  # Graph generation is best-effort in fixture mode.
+    return fixture
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
 
 def load_json(path: Path) -> dict[str, Any] | None:
     try:
@@ -119,913 +206,238 @@ def load_json(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def scenarios() -> dict[str, dict[str, Any]]:
-    try:
-        return discover_scenarios(SCENARIOS_PATH)
-    except CompatibilityError:
-        return {}
-
-
-def fixture_for_scenario(scenario_id: str) -> dict[str, Any] | None:
-    matches = list(SCENARIOS_PATH.glob(f"{scenario_id}-*/current-twin.json"))
-    return load_json(matches[0]) if len(matches) == 1 else None
-
-
-def matching_fixture(change: dict[str, Any]) -> dict[str, Any] | None:
-    """Return an existing fixture whose target and before value actually match."""
-    for path in sorted(SCENARIOS_PATH.glob("S*/current-twin.json")):
-        twin = load_json(path)
-        if not twin:
-            continue
-        resource = next((r for r in twin.get("resources", []) if r["id"] == change["target_resource"]), None)
-        if not resource:
-            continue
-        property_name = change["property"].split(".")[-1]
-        current = resource.get("properties", {}).get(property_name)
-        if current == change["before"]:
-            return twin
-    return None
-
-
-def current_twin_for(change: dict[str, Any], mode: str) -> dict[str, Any] | None:
-    twin = st.session_state.get("twin")
-    if mode == "Live AWS Mode":
-        return twin
-    return matching_fixture(change) or twin
-
-
-def test_connections(region: str, cluster_name: str) -> dict[str, dict[str, Any]]:
-    """Perform read-only connectivity checks without exposing identity data."""
-    result: dict[str, dict[str, Any]] = {}
-    sdk = Config(retries={"total_max_attempts": 2, "mode": "standard"}, connect_timeout=5, read_timeout=12)
-    session = boto3.Session(region_name=region)
-    try:
-        session.client("sts", config=sdk).get_caller_identity()
-        result["aws"] = {"ok": True, "detail": "Read-only session available"}
-    except (ClientError, BotoCoreError):
-        result["aws"] = {"ok": False, "detail": "Credentials unavailable or session rejected"}
-    try:
-        cluster = session.client("eks", config=sdk).describe_cluster(name=cluster_name)["cluster"]
-        result["eks"] = {"ok": True, "detail": f"Cluster status: {cluster['status']}"}
-    except (ClientError, BotoCoreError):
-        result["eks"] = {"ok": False, "detail": "Cluster unavailable"}
-    try:
-        config.load_kube_config()
-        version = client.VersionApi().get_code()
-        result["kubernetes"] = {"ok": True, "detail": f"API {version.git_version}"}
-    except (ApiException, OSError, ValueError, config.ConfigException):
-        result["kubernetes"] = {"ok": False, "detail": "Kubeconfig or API unavailable"}
-    return result
-
-
-def run_discovery(region: str, cluster_name: str) -> tuple[dict[str, Any], list[str]]:
-    """Run the existing read-only collectors and normalize a Current Twin."""
-    warnings: list[str] = []
-    progress = st.status("Discovering infrastructure…", expanded=True)
-    try:
-        progress.write("Discovering AWS resources")
-        aws = AWSCollector(region).collect()
-        warnings.extend(aws.get("warnings", []))
-        progress.write("Discovering Kubernetes resources")
-        kubernetes = KubernetesCollector().collect()
-        warnings.extend(kubernetes.get("warnings", []))
-        progress.write("Normalizing resources and relationships")
-        twin = normalize(aws, kubernetes, region, cluster_name)
-        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        STATE_PATH.write_text(json.dumps(twin, indent=2), encoding="utf-8")
-        build_graph(twin, GRAPH_PATH)
-        progress.update(label="Current Twin generated successfully", state="complete", expanded=False)
-        return twin, warnings
-    except Exception:
-        progress.update(label="Discovery failed", state="error", expanded=True)
-        raise
+def resource_count(twin: dict[str, Any], resource_type: str) -> int:
+    return sum(1 for resource in twin["resources"] if resource["type"] == resource_type)
 
 
 def metric_card(label: str, value: Any) -> None:
-    st.markdown(f'<div class="card"><div class="eyebrow">{label}</div><div class="metric-value">{value}</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="metric-card"><div class="metric-label">{label}</div>'
+        f'<div class="metric-value">{value}</div></div>',
+        unsafe_allow_html=True,
+    )
 
 
-def resource_count(twin: dict[str, Any], resource_type: str) -> int:
-    return sum(1 for resource in twin.get("resources", []) if resource.get("type") == resource_type)
+def render_connection_status(results: dict[str, dict[str, Any]]) -> None:
+    labels = {"aws": "AWS", "eks": "EKS", "kubernetes": "Kubernetes"}
+    for key, label in labels.items():
+        item = results.get(key, {"ok": False, "detail": "Not tested"})
+        if item["ok"]:
+            st.markdown(
+                f'<div class="status-card">&#10003; {label} Connected<br>'
+                f'<small>{item["detail"]}</small></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.error(f"{label} connection failed: {item['detail']}")
 
 
-def render_metrics(twin: dict[str, Any]) -> None:
-    resources = twin.get("resources", [])
-    relationships = twin.get("relationships", [])
-    aws_count = sum(r.get("provider") == "aws" for r in resources)
-    k8s_count = sum(r.get("provider") == "kubernetes" for r in resources)
-    metrics = [
-        ("Resources", len(resources)), ("Relationships", len(relationships)),
-        ("AWS", aws_count), ("Kubernetes", k8s_count),
-        ("Worker nodes", resource_count(twin, "NODE")), ("Deployments", resource_count(twin, "DEPLOYMENT")),
-        ("Services", resource_count(twin, "SERVICE")), ("StatefulSets", resource_count(twin, "STATEFUL_SET")),
+def render_dashboard(twin: dict[str, Any]) -> None:
+    summary = twin["summary"]
+    total = summary["aws_resources"] + summary["kubernetes_resources"]
+    top_metrics = [
+        ("AWS Resources", summary["aws_resources"]),
+        ("Kubernetes Resources", summary["kubernetes_resources"]),
+        ("Relationships", summary["relationships"]),
+        ("Total Resources", total),
     ]
     columns = st.columns(4)
-    for index, (label, value) in enumerate(metrics):
-        with columns[index % 4]:
+    for column, (label, value) in zip(columns, top_metrics):
+        with column:
+            metric_card(label, value)
+
+    st.write("")
+    details = [
+        ("EKS Cluster", twin["metadata"]["cluster"]),
+        ("Worker Nodes", resource_count(twin, "NODE")),
+        ("VPCs", resource_count(twin, "VPC")),
+        ("Subnets", resource_count(twin, "SUBNET")),
+        ("Deployments", resource_count(twin, "DEPLOYMENT")),
+        ("Pods", resource_count(twin, "POD")),
+        ("Services", resource_count(twin, "SERVICE")),
+        ("Load Balancers", resource_count(twin, "LOAD_BALANCER")),
+    ]
+    detail_columns = st.columns(4)
+    for index, (label, value) in enumerate(details):
+        with detail_columns[index % 4]:
             metric_card(label, value)
             if index < 4:
                 st.write("")
 
 
-def render_pipeline(
-    parsed: bool = False,
-    changeset_ready: bool = False,
-    future_ready: bool = False,
-    diff_ready: bool = False,
-    analysis_ready: bool = False,
-) -> None:
-    stages = [
-        ("Current Twin", bool(st.session_state.get("twin"))),
-        ("Change Parsed", parsed),
-        ("ChangeSet", changeset_ready),
-        ("Future Twin", future_ready),
-        ("State Diff", diff_ready),
-    ]
-    affected_ready = bool(st.session_state.get("affected_resources"))
-    st.markdown("#### CloudTwin pipeline")
-    left, right = st.columns(2)
-    with left:
-        for item, done in stages:
-            style, marker, suffix = (
-                ("pipeline-done", "✓", "") if done
-                else ("pipeline-next", "◌", " — awaiting prior stage")
-            )
-            status = " — COMPLETE" if done else suffix
-            st.markdown(f'<div class="{style}">{marker} {item}{status}</div>', unsafe_allow_html=True)
-        for item in ("Security Analysis", "Resilience Analysis"):
-            style = "pipeline-done" if analysis_ready else "pipeline-next"
-            status = "COMPLETE" if analysis_ready else "AWAITING CHANGE"
-            st.markdown(f'<div class="{style}">{item} — {status}</div>', unsafe_allow_html=True)
-    explanation = st.session_state.get("analysis_explanation") or {}
-    ai_ready = analysis_ready and bool(explanation)
-    ai_status = ("COMPLETE — LLM" if explanation.get("source") == "llm"
-                 else "COMPLETE — texte de secours") if ai_ready else "AWAITING CHANGE"
-    fixes_ready = any(entry[1] for entry in (st.session_state.get("ai_cache") or {}).values())
-    with right:
-        for item, done, status in (
-            ("Affected Resources", affected_ready, None), ("Blast Radius", analysis_ready, None),
-            ("Risk Score", analysis_ready, None), ("AI Explanation", ai_ready, ai_status),
-            ("Verified Fixes", fixes_ready, "COMPLETE" if fixes_ready
-             else ("READY — onglet Correctifs vérifiés" if analysis_ready else "AWAITING CHANGE")),
-        ):
-            style = "pipeline-done" if done else "pipeline-next"
-            status = status or ("COMPLETE" if done else "AWAITING CHANGE")
-            st.markdown(f'<div class="{style}">{item} — {status}</div>', unsafe_allow_html=True)
+def render_graph() -> None:
+    st.subheader("Current Digital Twin")
+    if GRAPH_PATH.exists() and GRAPH_PATH.stat().st_size:
+        components.html(GRAPH_PATH.read_text(encoding="utf-8"), height=920, scrolling=True)
+    else:
+        st.info("Run infrastructure discovery to generate the interactive Current Twin.")
 
 
-def render_overview(mode: str) -> None:
-    st.markdown('<div class="hero"><div class="eyebrow" style="color:#67e8f9">Cloud infrastructure intelligence</div><h1>CloudTwin AI</h1><p>Digital Twin for AWS &amp; Kubernetes</p></div>', unsafe_allow_html=True)
-    st.write("")
-    st.markdown("### From live infrastructure to explainable change analysis")
-    steps = ["Live Infrastructure", "Discovery", "Current Twin", "Change Ingestion", "Analysis"]
-    flow = []
-    for index, step in enumerate(steps):
-        flow.append(f'<span class="flow-step">{step}</span>')
-        if index < len(steps) - 1:
-            flow.append('<span class="flow-arrow">→</span>')
-    st.markdown(f'<div class="flow">{"".join(flow)}</div>', unsafe_allow_html=True)
-    st.caption("Available today: sanitized local fixtures or read-only live discovery. No infrastructure mutation is performed.")
-    twin = st.session_state.get("twin") or {}
-    resources, relationships = twin.get("resources", []), twin.get("relationships", [])
-    columns = st.columns(5)
-    values = [
-        ("Datasource", mode), ("Current Twin", "Available" if twin else "Not available"),
-        ("Resources", len(resources)), ("Relationships", len(relationships)),
-        ("Latest simulation", "Complete" if st.session_state.get("analysis_result") else "Not available"),
-    ]
-    for column, (label, value) in zip(columns, values):
-        with column:
-            metric_card(label, value)
-    render_pipeline(
-        parsed=bool(st.session_state.get("pending_scenario")),
-        changeset_ready=bool(st.session_state.get("confirmed_changeset")),
-        future_ready=bool(st.session_state.get("future_twin")),
-        diff_ready=bool(st.session_state.get("state_diff")),
-        analysis_ready=bool(st.session_state.get("analysis_result")),
-    )
-    st.markdown("### Scenario analysis preview")
-    available = scenarios()
-    selected = st.selectbox(
-        "Scenario pack", list(available), format_func=lambda sid: f"{sid} — {available[sid]['name']}",
-        key="overview-scenario",
-    )
-    twin = fixture_for_scenario(selected)
-    try:
-        changeset = ChangeIngester(twin).ingest_scenario(available[selected])
-        result = run_analysis(context_from_changeset(changeset, twin)).model_dump(mode="json")
-        replica = next((finding for finding in result["findings"] if finding["rule_id"] == "RULE-RES-001"), None)
-        if replica and replica["status"] == "fail":
-            st.error(f"ACTIVE {replica['severity'].upper()}-SEVERITY FINDING — {replica['title']}")
-        else:
-            st.success("PASS — no active resilience finding")
-            st.caption("Potential rule severity if it fails: HIGH")
-    except (IngestionError, ValueError) as exc:
-        st.warning(f"Scenario preview unavailable: {exc}")
-
-
-def render_connection_status(results: dict[str, dict[str, Any]]) -> None:
-    columns = st.columns(3)
-    for column, key, label in zip(columns, ("aws", "eks", "kubernetes"), ("AWS", "EKS", "Kubernetes")):
-        item = results.get(key, {"ok": False, "detail": "Not tested"})
-        with column:
-            metric_card(label, "Connected" if item["ok"] else "Disconnected")
-            st.caption(item["detail"])
-
-
-def render_infrastructure(mode: str, region: str, cluster_name: str) -> None:
-    st.title("Infrastructure")
-    st.caption("Connect to live read-only discovery or run the complete demonstration with sanitized fixtures.")
-    if mode == "Local Fixture Mode":
-        st.info("Running using sanitized Local Fixture Mode — no AWS calls are made.")
-        available = scenarios()
-        fixture_id = st.selectbox("Fixture Current Twin", list(available), format_func=lambda sid: f"{sid} — {available[sid]['name']}")
-        twin = fixture_for_scenario(fixture_id)
-        if twin:
-            st.session_state.twin = twin
-            st.session_state.twin_source = f"Local fixture {fixture_id}"
-            render_metrics(twin)
-            st.success("Current Twin loaded successfully from sanitized fixture data.")
-        else:
-            st.error("The selected fixture Current Twin is unavailable.")
+def render_scenario(twin: dict[str, Any] | None) -> None:
+    st.subheader("Proposed Change")
+    scenario = load_json(SCENARIO_PATH)
+    if not scenario:
+        st.warning("The proposed scenario file is unavailable.")
         return
-    st.warning("Live AWS Mode performs read-only API discovery. It never applies Terraform or Kubernetes changes.")
-    if st.button("Test read-only connections", use_container_width=True):
-        with st.spinner("Checking AWS, EKS, and Kubernetes access…"):
-            st.session_state.connection_results = test_connections(region, cluster_name)
-    if "connection_results" in st.session_state:
-        render_connection_status(st.session_state.connection_results)
-    if st.button("Run Discovery", type="primary", use_container_width=True):
-        try:
-            twin, warnings = run_discovery(region, cluster_name)
-            st.session_state.twin = twin
-            st.session_state.twin_source = "Live read-only discovery"
-            st.success("Current Twin generated successfully")
-            for warning in warnings:
-                st.warning(warning)
-        except Exception:
-            st.error("Discovery could not complete. No infrastructure changes were made.")
-    twin = st.session_state.get("twin")
-    if twin and st.session_state.get("twin_source") == "Live read-only discovery":
-        render_metrics(twin)
-
-
-def render_current_twin(mode: str) -> None:
-    st.title("Current Twin")
-    st.write("Current Twin is the graph representation of the infrastructure CloudTwin discovered.")
-    twin = st.session_state.get("twin")
-    if not twin and mode == "Local Fixture Mode":
-        twin = fixture_for_scenario("S01")
-        st.session_state.twin = twin
-        st.session_state.twin_source = "Local fixture S01"
-    if not twin:
-        st.info("Open Infrastructure and run discovery or select a local fixture first.")
-        return
-    future_twin = st.session_state.get("future_twin")
-    snapshot = "Current Twin"
-    if future_twin:
-        snapshot = st.radio("Twin snapshot", ["Current Twin", "Future Twin"], horizontal=True)
-        if snapshot == "Future Twin":
-            twin = future_twin
-            st.info("Future Twin is an in-memory simulation only. The discovered Current Twin is unchanged.")
-    st.caption(f"Source: {st.session_state.get('twin_source', 'Current Twin output')} — {snapshot}")
-    render_metrics(twin)
-    st.write("")
-    st.markdown("### Explore the graph")
-    view = st.selectbox(
-        "Graph view",
-        GRAPH_VIEWS,
-        index=0,
-        help="Application View is a simplified projection. Full Infrastructure preserves the complete discovered graph.",
-    )
-    type_options = allowed_types(view, twin)
-    discovered_providers = sorted({resource["provider"] for resource in twin.get("resources", [])})
-    default_providers = {
-        "Kubernetes View": [provider for provider in discovered_providers if provider == "kubernetes"],
-        "AWS Infrastructure View": [provider for provider in discovered_providers if provider == "aws"],
-    }.get(view, discovered_providers)
-    filter_columns = st.columns(2)
-    with filter_columns[0]:
-        selected_providers = st.multiselect(
-            "Provider",
-            discovered_providers,
-            default=default_providers,
-            format_func=lambda provider: "AWS" if provider == "aws" else "Kubernetes",
-            key=f"graph-providers-{view}",
+    current = scenario["change"]["before"]
+    if twin:
+        ui = next(
+            (resource for resource in twin["resources"] if resource["type"] == "DEPLOYMENT"
+             and resource["name"] == scenario["resource"]
+             and resource["properties"].get("namespace") == "default"),
+            None,
         )
-    with filter_columns[1]:
-        selected_types = st.multiselect(
-            "Resource type",
-            type_options,
-            default=type_options,
-            format_func=lambda resource_type: resource_type.replace("_", " ").title(),
-            key=f"graph-types-{view}",
-        )
-    projection = project_twin(
-        twin,
-        view,
-        providers=set(selected_providers),
-        resource_types=set(selected_types),
-    )
-    visible_nodes = len(projection["resources"])
-    visible_relationships = len(projection["relationships"])
-    total_nodes = len(twin.get("resources", []))
-    total_relationships = len(twin.get("relationships", []))
-    summary_columns = st.columns(4)
-    for column, (label, value) in zip(summary_columns, [
-        ("Visible nodes", visible_nodes),
-        ("Visible relationships", visible_relationships),
-        ("Total discovered nodes", total_nodes),
-        ("Total relationships", total_relationships),
-    ]):
-        with column:
-            metric_card(label, value)
-    st.caption(
-        f"{view} — {visible_nodes} visible nodes / {visible_relationships} relationships. "
-        f"This is a projection of the {snapshot}; no relationships are inferred."
-    )
-    legend_html = "".join(
-        f'<span style="display:inline-flex;align-items:center;gap:.4rem;margin:0 .9rem .45rem 0;">'
-        f'<img src="{icon}" alt="" style="width:1.6rem;height:1.6rem;">{label}</span>'
-        for label, _color, icon in legend_items()
-    )
-    st.markdown(f'<div class="card" style="min-height:0;padding:.7rem 1rem;"><b>Legend</b><br>{legend_html}</div>', unsafe_allow_html=True)
-    if not projection["resources"]:
-        st.info("No resources match the selected view and filters.")
-        return
-    build_graph(projection, GRAPH_PATH, view=view)
-    components.html(GRAPH_PATH.read_text(encoding="utf-8"), height=930, scrolling=True)
-    st.caption("Select a node to highlight its direct relationships. Click empty space to restore the full projection.")
-
-
-def set_pending_change(scenario: dict[str, Any], twin: dict[str, Any], origin: str) -> None:
-    st.session_state.pending_scenario = scenario
-    st.session_state.pending_twin = twin
-    st.session_state.pending_origin = origin
-    st.session_state.pop("confirmed_changeset", None)
-    st.session_state.pop("analysis_result", None)
-    st.session_state.pop("future_twin", None)
-    st.session_state.pop("state_diff", None)
-    st.session_state.pop("affected_resources", None)
-    st.session_state.pop("simulation_report", None)
-    st.session_state.pop("show_diff_graph", None)
-
-
-def render_proposal(scenario: dict[str, Any]) -> None:
-    labels = {"DEPLOYMENT": "Deployment", "SERVICE": "Service", "SECURITY_GROUP": "Security Group"}
-    st.markdown("### Proposed change")
+        if ui:
+            current = ui["properties"].get("replicas", current)
+    proposed = scenario["change"]["after"]
     st.markdown(
-        f"""<div class="proposal"><div class="eyebrow">Simulation only — no infrastructure mutation</div>
-        <h4>{scenario['name']}</h4><b>Resource:</b> {labels.get(scenario['resource_type'], scenario['resource_type'].title())}<br>
-        <b>Resource ID:</b> <code>{scenario['target_resource']}</code><br><b>Operation:</b> {scenario.get('operation', 'update').upper()}<br>
-        <b>Property:</b> {scenario['property']}<br><b>Current:</b> <code>{json.dumps(scenario.get('before'), sort_keys=True)}</code><br>
-        <b>Proposed:</b> <code>{json.dumps(scenario.get('after'), sort_keys=True)}</code></div>""",
+        f'<div class="proposal"><b>{scenario["name"]}</b><br><br>'
+        f'UI replicas &nbsp; Current: <b>{current}</b> &nbsp; Proposed: <b>{proposed}</b></div>',
         unsafe_allow_html=True,
     )
+    st.write("")
+    st.button("Simulate Change — Next Phase", disabled=True, use_container_width=True)
 
 
-def future_twin_for(twin: dict[str, Any], changeset: Any) -> dict[str, Any]:
-    """Future Twin strict ; si la fixture n'a pas encore la propriété modifiée, interface canonique.
-
-    Exemples : S03 (`service_type_and_scheme`, propriété composée) et S04 (`ingress_rules`,
-    absente de la fixture qui ne garde que le nombre de règles). L'interface stricte refuse ;
-    `build_future_twin` ajoute la propriété et le signale en avertissement. Une valeur `before`
-    périmée reste une erreur : elle est déjà refusée par l'ingestion (strict_conflict_check).
-    """
-    st.session_state.pop("simulation_warnings", None)
-    try:
-        return simulate_future_twin(twin, changeset)
-    except SimulationError as exc:
-        if "does not exist" not in str(exc):
-            raise
-    built = build_future_twin(twin, changeset.changes)
-    st.session_state.simulation_warnings = built.warnings
-    return built.twin
-
-
-def confirm_pending_change() -> None:
-    scenario = st.session_state.pending_scenario
-    twin = st.session_state.pending_twin
-    try:
-        changeset = ChangeIngester(twin).ingest_scenario(scenario, strict_conflict_check=True)
-        future_twin = future_twin_for(twin, changeset)
-        state_diff = calculate_state_diff(twin, future_twin)
-        diff_data = state_diff.to_dict()
-        structural = analyze_affected_resources(diff_data, twin, future_twin, changeset)
-        context = context_from_changeset(
-            changeset, twin, future_twin=future_twin, state_diff=diff_data
-        )
-        result = run_analysis(context)
-        explanation = explain_analysis(result).model_dump(mode="json")
-    except (IngestionError, SimulationError, ValueError, KeyError) as exc:
-        st.session_state.confirmation_error = str(exc)
-        return
-    st.session_state.confirmed_changeset = changeset.to_dict()
-    st.session_state.analysis_result = result.model_dump(mode="json")
-    st.session_state.analysis_explanation = explanation
-    # Objets gardés pour l'analyste IA et les correctifs vérifiés (page Analysis).
-    st.session_state.analysis_context = context
-    st.session_state.analysis_result_obj = result
-    st.session_state.ai_cache = {}
-    st.session_state.future_twin = future_twin
-    st.session_state.state_diff = state_diff.to_dict()
-    st.session_state.affected_resources = structural.model_dump(mode="json")
-    st.session_state.pop("confirmation_error", None)
-
-
-def render_changeset(changeset: dict[str, Any]) -> None:
-    st.markdown("### Normalized ChangeSet")
-    change = changeset["changes"][0]
-    fields = [
-        ("Change ID", change["change_id"]), ("Operation", change["operation"].upper()),
-        ("Canonical resource ID", change["resource_id"]), ("Resource type", change["resource_type"]),
-        ("Property path", change.get("property_path") or "Whole resource"), ("Before", json.dumps(change.get("before"), sort_keys=True)),
-        ("After", json.dumps(change.get("after"), sort_keys=True)), ("Source", change.get("source", {}).get("kind", changeset["source_kind"])),
-    ]
-    columns = st.columns(2)
-    for index, (label, value) in enumerate(fields):
-        with columns[index % 2]:
-            st.markdown(f"**{label}**")
-            st.code(str(value))
-    with st.expander("View raw normalized ChangeSet"):
-        st.json(changeset)
-
-
-def _resource(twin: dict[str, Any], resource_id: str) -> dict[str, Any] | None:
-    return next((item for item in twin.get("resources", []) if item["id"] == resource_id), None)
-
-
-def _display_name(resource_id: str, current: dict[str, Any], future: dict[str, Any]) -> str:
-    resource = _resource(future, resource_id) or _resource(current, resource_id)
-    return readable_label(resource) if resource else resource_id.split(":")[-1].replace("-", " ").title()
-
-
-def _diff_groups(diff: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-    changes = diff.get("changes", [])
-    return {
-        "added": [item for item in changes if item["change_type"] == "ADDED"],
-        "removed": [item for item in changes if item["change_type"] == "REMOVED"],
-        "modified": [item for item in changes if item["change_type"] == "MODIFIED"],
-        "relationships_added": diff.get("added_relationships", []),
-        "relationships_removed": diff.get("removed_relationships", []),
-    }
-
-
-def _plain_explanation(
-    changeset: dict[str, Any], diff: dict[str, Any], current: dict[str, Any], future: dict[str, Any]
-) -> str:
-    change = changeset["changes"][0]
-    name = _display_name(change["resource_id"], current, future)
-    groups = _diff_groups(diff)
-    if change["operation"] == "delete":
-        count = len(groups["relationships_removed"])
-        return (
-            f"The simulated Future Twin removes {name}. {count} relationship{'s' if count != 1 else ''} "
-            "connected to this resource disappear from the simulated topology. "
-            "The real Kubernetes cluster and AWS infrastructure remain unchanged."
-        )
-    property_name = (change.get("property_path") or "property").split(".")[-1].replace("_", " ")
-    relationship_changes = len(groups["relationships_added"]) + len(groups["relationships_removed"])
-    return (
-        f"The simulated Future Twin changes {name} {property_name} from {change.get('before')} to "
-        f"{change.get('after')}. No resources are removed and {relationship_changes} relationships change. "
-        "The real Kubernetes cluster and AWS infrastructure remain unchanged."
-    )
-
-
-def render_diff_summary(diff: dict[str, Any]) -> None:
-    groups = _diff_groups(diff)
-    relationship_count = len(groups["relationships_added"]) + len(groups["relationships_removed"])
-    values = [
-        ("ADDED RESOURCES", len(groups["added"])),
-        ("REMOVED RESOURCES", len(groups["removed"])),
-        ("MODIFIED PROPERTIES", len(groups["modified"])),
-        ("ADDED RELATIONSHIPS", len(groups["relationships_added"])),
-        ("REMOVED RELATIONSHIPS", len(groups["relationships_removed"])),
-    ]
-    for column, (label, value) in zip(st.columns(5), values):
-        with column:
-            active = " active" if value else ""
-            st.markdown(
-                f'<div class="diff-stat{active}"><div class="eyebrow">{label}</div>'
-                f'<div class="diff-number">{value}</div></div>', unsafe_allow_html=True,
-            )
-
-
-def render_affected_resources() -> None:
-    result = st.session_state.get("affected_resources", {})
-    affected = [item for item in result.get("affected", []) if item.get("distance", 0) > 0]
-    st.markdown("### Affected Resources")
-    st.caption("Structural impact from dependency paths. Risk interpretation remains in Fatma's analysis below.")
-    if not affected:
-        st.info("No dependent resource is structurally affected; only the changed resource is impacted.")
-    for item in affected:
-        name = item.get("resource_name") or item["target"].split(":")[-1]
-        nodes = [node.split(":")[-1] for node in item.get("path", [])]
-        relationships = item.get("relationship_types", [])
-        path: list[str] = []
-        for index, node in enumerate(nodes):
-            path.append(node)
-            if index < len(relationships):
-                path.append(relationships[index])
-        with st.container(border=True):
-            st.markdown(f"**{name}**")
-            st.write(f"Impact: {item['impact'].title()} · Distance: {item['distance']}")
-            st.write(item.get("reason") or "A structural dependency path was identified.")
-            st.code(" → ".join(path))
-    with st.expander("Technical Details — affected-resource contract"):
-        st.json(result)
-
-
-def render_human_diff(
-    diff: dict[str, Any], current: dict[str, Any], future: dict[str, Any]
-) -> None:
-    groups = _diff_groups(diff)
-    for change in groups["modified"]:
-        name = _display_name(change["resource_id"], current, future)
-        prop = change["property"].split(".")[-1].replace("_", " ").title()
-        st.markdown(f"**Modified — {name}**  \n{prop}: `{change.get('before')}` → `{change.get('after')}`")
-    for change in groups["removed"]:
-        st.markdown(f"**Removed resource — {_display_name(change['resource_id'], current, future)}**")
-    for relationship in groups["relationships_removed"]:
-        source = _display_name(relationship["source"], current, future)
-        target = _display_name(relationship["target"], current, future)
-        verb = relationship["type"].replace("_", " ").lower()
-        st.markdown(
-            f'<div class="relationship-card"><div class="eyebrow">Removed relationship</div>'
-            f'<strong>{html.escape(source)}</strong> &nbsp;→ {html.escape(verb)} →&nbsp; '
-            f'<strong>{html.escape(target)}</strong></div>', unsafe_allow_html=True,
-        )
-
-
-def render_simulation_experience(
-    scenario: dict[str, Any], changeset: dict[str, Any], diff: dict[str, Any],
-    current: dict[str, Any], future: dict[str, Any],
-    *, datasource_mode: str = "Local Fixture Mode", aws_region: str | None = None,
-    eks_cluster: str | None = None,
-) -> None:
-    change = changeset["changes"][0]
-    target_name = _display_name(change["resource_id"], current, future)
-    groups = _diff_groups(diff)
-    st.header("Simulation Result")
-    summary = st.columns(4)
-    summary[0].markdown(f"**Change**  \n{scenario.get('name', 'Proposed change')}")
-    summary[1].markdown(f"**Target**  \n{target_name}")
-    summary[2].markdown(f"**Operation**  \n{change['operation'].upper()}")
-    result_parts = []
-    if groups["modified"]:
-        result_parts.append(f"{len(groups['modified'])} modified property")
-    if groups["removed"]:
-        result_parts.append(f"{len(groups['removed'])} resource removed")
-    if groups["relationships_removed"]:
-        result_parts.append(f"{len(groups['relationships_removed'])} relationships removed")
-    summary[3].markdown(f"**Result**  \n{', '.join(result_parts) or 'Structural change recorded'}")
-    st.markdown('<div class="safe-note"><b>SIMULATION ONLY</b> — real AWS/EKS infrastructure is unchanged.</div>', unsafe_allow_html=True)
-
-    action_left, action_right = st.columns(2)
-    with action_left:
-        if st.button("View Diff Graph", use_container_width=True):
-            st.session_state.show_diff_graph = True
-    with action_right:
-        if st.button("Generate Simulation Report", type="primary", use_container_width=True):
-            report = build_simulation_report(
-                scenario=scenario,
-                changeset=changeset,
-                current_twin=current,
-                future_twin=future,
-                state_diff=diff,
-                analysis_result=st.session_state.get("analysis_result"),
-                affected_resources=st.session_state.get("affected_resources"),
-                explanation=st.session_state.get("analysis_explanation"),
-                datasource_mode=datasource_mode,
-                source=st.session_state.get("pending_origin", "Simulation"),
-                aws_region=aws_region,
-                eks_cluster=eks_cluster,
-            )
-            st.session_state.simulation_report = {
-                "filename": report.filename,
-                "html": report.html,
-                "generated_at": report.generated_at,
-            }
-    if st.session_state.get("show_diff_graph"):
-        st.markdown("### Focused Diff Graph")
-        action_projection = project_diff(current, future, diff)
-        build_graph(action_projection, DIFF_GRAPH_PATH, view="Diff View")
-        components.html(DIFF_GRAPH_PATH.read_text(encoding="utf-8"), height=720, scrolling=True)
-        st.caption("🟢 Added  ·  🟠 Modified  ·  🔴 Removed  ·  ⚪ Context")
-    report_data = st.session_state.get("simulation_report")
-    if report_data:
-        st.markdown("## Simulation Report Preview")
-        st.caption(f"Generated locally: {report_data['generated_at']}")
-        components.html(report_data["html"], height=900, scrolling=True)
-        st.download_button(
-            "Download Report",
-            data=report_data["html"].encode("utf-8"),
-            file_name=report_data["filename"],
-            mime="text/html",
-            use_container_width=True,
-        )
-
-    tabs = st.tabs(["Summary", "Diff View", "Current Twin", "Future Twin", "Technical Details"])
-    with tabs[0]:
-        st.markdown("### Current Twin → Future Twin")
-        current_col, arrow_col, future_col = st.columns([5, 1, 5])
-        deleted = change["operation"] == "delete"
-        property_name = (change.get("property_path") or "Resource").split(".")[-1].replace("_", " ").title()
-        with current_col:
-            current_value = "PRESENT" if deleted else change.get("before")
-            st.markdown(
-                f'<div class="sim-card"><div class="eyebrow">CURRENT TWIN</div><strong>{html.escape(target_name)}</strong>'
-                f'<div class="sim-value">{html.escape(str(current_value))}</div><span>{property_name}</span>'
-                f'<div class="sim-id">{html.escape(change["resource_id"])}</div></div>', unsafe_allow_html=True,
-            )
-        with arrow_col:
-            st.markdown('<div style="font-size:2rem;text-align:center;padding-top:2.5rem;color:#64748b">→</div>', unsafe_allow_html=True)
-        with future_col:
-            future_value = "REMOVED" if deleted else change.get("after")
-            card_class = "sim-card sim-removed" if deleted else "sim-card sim-future"
-            st.markdown(
-                f'<div class="{card_class}"><div class="eyebrow">FUTURE TWIN — SIMULATED</div><strong>{html.escape(target_name)}</strong>'
-                f'<div class="sim-value">{html.escape(str(future_value))}</div><span>{property_name}</span>'
-                f'<div class="sim-id">No infrastructure mutation performed</div></div>', unsafe_allow_html=True,
-            )
-        st.markdown("### State Diff")
-        render_diff_summary(diff)
-        render_human_diff(diff, current, future)
-        render_affected_resources()
-        st.markdown("### What changed?")
-        st.info(_plain_explanation(changeset, diff, current, future))
-    with tabs[1]:
-        st.markdown("### Focused Diff View")
-        st.caption("Only changed resources, real direct neighbors, and actual relationships are shown.")
-        projection = project_diff(current, future, diff)
-        build_graph(projection, DIFF_GRAPH_PATH, view="Diff View")
-        components.html(DIFF_GRAPH_PATH.read_text(encoding="utf-8"), height=720, scrolling=True)
-        st.caption("🟢 Added  ·  🟠 Modified  ·  🔴 Removed  ·  ⚪ Context")
-    with tabs[2]:
-        build_graph(current, CURRENT_COMPARE_PATH, view="Application View")
-        components.html(CURRENT_COMPARE_PATH.read_text(encoding="utf-8"), height=720, scrolling=True)
-    with tabs[3]:
-        st.caption("Future Twin — simulated. Real infrastructure is unchanged.")
-        build_graph(future, FUTURE_COMPARE_PATH, view="Application View")
-        components.html(FUTURE_COMPARE_PATH.read_text(encoding="utf-8"), height=720, scrolling=True)
-    with tabs[4]:
-        st.caption("Canonical identifiers and raw contracts for technical review.")
-        with st.expander("View normalized ChangeSet"):
-            st.json(changeset)
-        with st.expander("View raw State Diff"):
-            st.json(diff)
-        with st.expander("View raw Current resource"):
-            st.json(_resource(current, change["resource_id"]))
-        with st.expander("View raw Future resource"):
-            st.json(_resource(future, change["resource_id"]))
-
-
-def render_change_assistant(mode: str, region: str, cluster_name: str) -> None:
-    st.title("Change Assistant")
-    st.subheader("What infrastructure change would you like to simulate?")
-    st.markdown('<div class="safe-note">Natural language → proposed structured change → confirmation → CloudTwin ingestion. This assistant never runs Terraform, kubectl, or AWS mutations.</div>', unsafe_allow_html=True)
-    available = scenarios()
-    tabs = st.tabs(["Use predefined scenario", "Describe custom change"])
-    with tabs[0]:
-        st.markdown("#### Suggested changes")
-        columns = st.columns(5)
-        for column, (label, scenario_id) in zip(columns, SUGGESTIONS.items()):
-            with column:
-                if st.button(label, key=f"suggest-{scenario_id}", use_container_width=True):
-                    twin = fixture_for_scenario(scenario_id) if mode == "Local Fixture Mode" else current_twin_for(available[scenario_id], mode)
-                    if twin:
-                        set_pending_change(available[scenario_id], twin, scenario_id)
-                    else:
-                        st.session_state.confirmation_error = "The selected target is not available in the active Current Twin."
-        selected_id = st.selectbox("Scenario pack", list(available), format_func=lambda sid: f"{sid} — {available[sid]['name']}")
-        if st.button("Prepare selected scenario", use_container_width=True):
-            twin = fixture_for_scenario(selected_id) if mode == "Local Fixture Mode" else current_twin_for(available[selected_id], mode)
-            if twin:
-                set_pending_change(available[selected_id], twin, selected_id)
-            else:
-                st.session_state.confirmation_error = "The selected target is not available in the active Current Twin."
-    with tabs[1]:
-        st.caption("Examples: “Scale the UI deployment from 1 to 4 replicas” or “Reduce UI replicas from 3 to 1”.")
-        request = st.chat_input("Describe a proposed infrastructure change")
-        if request:
-            try:
-                parsed = parse_change_request(request)
-                twin = current_twin_for(parsed.scenario, mode)
-                if not twin:
-                    raise UnsupportedChangeRequest("The request was parsed, but its target/current value is not present in the active Current Twin.")
-                set_pending_change(parsed.scenario, twin, "Custom request")
-            except UnsupportedChangeRequest as exc:
-                st.session_state.parse_error = str(exc)
-    if "parse_error" in st.session_state:
-        st.warning(st.session_state.pop("parse_error"))
-    if "confirmation_error" in st.session_state:
-        st.warning(st.session_state.confirmation_error)
-    scenario = st.session_state.get("pending_scenario")
-    if scenario:
-        render_proposal(scenario)
-        confirm, cancel = st.columns(2)
-        with confirm:
-            if st.button("Confirm for Analysis", type="primary", use_container_width=True):
-                confirm_pending_change()
-        with cancel:
-            if st.button("Cancel", use_container_width=True):
-                for key in (
-                    "pending_scenario", "pending_twin", "pending_origin", "confirmed_changeset",
-                    "analysis_result", "analysis_explanation", "future_twin", "state_diff", "affected_resources",
-                    "simulation_report", "show_diff_graph",
-                ):
-                    st.session_state.pop(key, None)
-                st.rerun()
-    changeset = st.session_state.get("confirmed_changeset")
-    if changeset:
-        render_simulation_experience(
-            st.session_state["pending_scenario"],
-            changeset,
-            st.session_state["state_diff"],
-            st.session_state["pending_twin"],
-            st.session_state["future_twin"],
-            datasource_mode=mode,
-            aws_region=region,
-            eks_cluster=cluster_name,
-        )
-        st.success("Future Twin and State Diff generated in memory. Open Analysis for the available resilience finding.")
-    render_pipeline(
-        parsed=bool(st.session_state.get("pending_scenario")),
-        changeset_ready=bool(st.session_state.get("confirmed_changeset")),
-        future_ready=bool(st.session_state.get("future_twin")),
-        diff_ready=bool(st.session_state.get("state_diff")),
-        analysis_ready=bool(st.session_state.get("analysis_result")),
-    )
-
-
-def render_analysis_result(result: dict[str, Any]) -> None:
-    findings = result.get("findings", [])
-    if not findings:
-        st.info("No implemented Fatma rule applies to this change yet.")
-        return
-    for category in ("security", "resilience"):
-        st.markdown(f"### {category.title()} Findings")
-        selected = [finding for finding in findings if finding.get("category") == category]
-        if not selected:
-            st.info(f"No {category} finding applies to this change.")
-        for finding in selected:
-            status, severity = finding["status"], finding["severity"].upper()
-            label = f"{finding['rule_id']} — {finding['title']}"
-            if status == "fail":
-                st.error(f"ACTIVE {severity}-SEVERITY FINDING — {label}")
-            elif status == "pass":
-                st.success(f"PASS — {label}")
-                st.caption(f"Potential rule severity if violated: {severity}")
-            else:
-                st.warning(f"NOT EVALUATED — {label}")
-            st.write(finding["description"])
-            if finding.get("remediation"):
-                st.markdown(f"**Recommendation:** {finding['remediation']}")
-            with st.expander(f"Evidence — {finding['rule_id']}"):
-                st.json(finding.get("evidence", {}))
-
-    radius = result.get("blast_radius") or {}
-    st.markdown("### Blast Radius")
-    st.write(f"Direct: {len(radius.get('direct', []))} · Indirect: {len(radius.get('indirect', []))}")
-    if radius.get("direct"):
-        st.code("\n".join(radius["direct"]))
-    if radius.get("indirect"):
-        st.code("\n".join(radius["indirect"]))
-
-    risk = result.get("risk") or {}
-    st.markdown("### Risk")
-    st.metric("Risk Score", f"{risk.get('score', 0)} / 100", risk.get("label", "Unknown"))
-    st.write(risk.get("explanation", "No score explanation available."))
-    st.caption(f"Findings: {risk.get('findings_points', 0)} · Blast radius: {risk.get('blast_radius_bonus', 0)}")
-
-
-
-def ai_outputs(run: bool = False) -> tuple[dict[str, Any], dict[str, Any], list[str]] | None:
-    """Explication IA + correctifs vérifiés pour le changement confirmé, mis en cache.
-
-    Sans LLM, tout est calculé tout de suite (texte de secours + catalogue).
-    Avec Ollama activé, on attend le clic : un appel prend quelques secondes.
-    """
-    context = st.session_state.get("analysis_context")
-    result = st.session_state.get("analysis_result_obj")
-    if context is None or result is None:
-        return None
-    client = llm_client()
-    key = (st.session_state.get("llm_model", "") if client else "", bool(client))
-    cache = st.session_state.setdefault("ai_cache", {})
-    if key not in cache:
-        if client and not run:
-            return None
-        with st.spinner("L'analyste IA rédige son explication et vérifie les correctifs..."):
-            report, rejected = remediate_with_ai(context, result, client)
-            explanation = explain_analysis(result, client=client).model_dump(mode="json")
-        cache[key] = (explanation, report.model_dump(mode="json"), rejected)
-        st.session_state.analysis_explanation = explanation
-    return cache[key]
-
-
-def render_attack_graph(changeset: dict[str, Any], result: dict[str, Any]) -> None:
-    """Future Twin coloré (modifié / direct / indirect) et chemin d'attaque IAM-003."""
-    future = st.session_state.get("future_twin")
-    if not future:
-        st.info("Future Twin indisponible.")
-        return
-    created = [c["resource_id"] for c in changeset["changes"] if c["operation"] == "create"]
-    changed = [c["resource_id"] for c in changeset["changes"] if c["operation"] != "create"]
-    out = {"future_twin": future, "analysis": result,
-           "simulation": {"changed": changed, "created": created}}
-    radius = result.get("blast_radius") or {}
-    cols = st.columns(2)
-    cols[0].metric("Impact direct (1 saut)", len(radius.get("direct", [])))
-    cols[1].metric("Impact indirect (2–3 sauts)", len(radius.get("indirect", [])))
-    st.markdown(
-        f'<span style="color:{HIGHLIGHT["changed"]}">●</span> modifié &nbsp; '
-        f'<span style="color:{HIGHLIGHT["direct"]}">●</span> direct &nbsp; '
-        f'<span style="color:{HIGHLIGHT["indirect"]}">●</span> indirect &nbsp; '
-        f'<span style="color:{ATTACK_EDGE}">━</span> chemin d\'attaque (IAM-003)',
-        unsafe_allow_html=True,
-    )
-    components.html(impact_graph_html(out), height=640, scrolling=False)
-
-
-def render_analysis(mode: str, region: str, cluster_name: str) -> None:
-    st.title("Analysis")
-    result = st.session_state.get("analysis_result")
-    changeset = st.session_state.get("confirmed_changeset")
-    if not result or not changeset:
-        st.info("Confirm a proposed change in Change Assistant to run the currently available analysis.")
-        render_pipeline()
-        return
-    render_simulation_experience(
-        st.session_state["pending_scenario"],
-        changeset,
-        st.session_state["state_diff"],
-        st.session_state["pending_twin"],
-        st.session_state["future_twin"],
-        datasource_mode=mode,
-        aws_region=region,
-        eks_cluster=cluster_name,
-    )
-    for warning in st.session_state.get("simulation_warnings") or []:
-        st.caption(f"Simulation : {warning}")
-    st.header("Analyse de risque")
-    tabs = st.tabs(["Risque", "Impact et chemin d'attaque", "Analyste IA", "Correctifs vérifiés"])
-    with tabs[0]:
-        render_analysis_result(result)
-        st.info("Structural affected resources are shown separately from Fatma's blast radius and risk interpretation.")
-    with tabs[1]:
-        render_attack_graph(changeset, result)
-    ai = ai_outputs()
-    with tabs[2]:
-        if ai is None:
-            st.info("Clique pour interroger le LLM local (quelques secondes).")
-            if st.button("Demander à l'analyste IA", type="primary"):
-                ai = ai_outputs(run=True)
-                st.rerun()
-        else:
-            render_ai(ai[0])
-    with tabs[3]:
-        if ai is None:
-            st.info("Les correctifs apparaissent après la réponse de l'analyste IA (onglet Analyste IA).")
-        else:
-            render_fixes(ai[1], ai[2])
-    render_pipeline(
-        parsed=True,
-        changeset_ready=True,
-        future_ready=True,
-        diff_ready=True,
-        analysis_ready=True,
-    )
-
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     configure_page()
+    st.markdown('<div class="hero"><h1>CloudTwin AI</h1><p>Digital Twin for AWS &amp; Kubernetes</p></div>', unsafe_allow_html=True)
+
+    # ------------------------------------------------------------------
+    # Determine the operating mode
+    # ------------------------------------------------------------------
+    has_creds = detect_aws_credentials()
+
+    # Allow the user to override via the sidebar (stored in session_state).
+    if "mode" not in st.session_state:
+        st.session_state.mode = "live" if has_creds else "local"
+
+    # ------------------------------------------------------------------
+    # Sidebar
+    # ------------------------------------------------------------------
     with st.sidebar:
-        st.markdown("## ☁️ CloudTwin")
-        st.caption("AWS & Kubernetes Digital Twin")
-        page = st.radio("Navigation", PAGES, label_visibility="collapsed")
+        st.header("Operating Mode")
+        mode_options = ["Local Fixture Mode", "Live AWS Mode"]
+        mode_index = 0 if st.session_state.mode == "local" else 1
+        selected = st.radio(
+            "Select mode",
+            mode_options,
+            index=mode_index,
+            help="Local Fixture Mode works offline without AWS credentials. "
+                 "Live AWS Mode requires configured boto3 credentials.",
+        )
+        st.session_state.mode = "local" if selected == "Local Fixture Mode" else "live"
+
+        if st.session_state.mode == "local":
+            st.markdown('<span class="mode-badge mode-local">📂 Local Fixture Mode</span>', unsafe_allow_html=True)
+        else:
+            st.markdown('<span class="mode-badge mode-live">☁️ Live AWS Mode</span>', unsafe_allow_html=True)
+
         st.divider()
-        mode = st.radio("Data source", ["Local Fixture Mode", "Live AWS Mode"])
-        region = st.text_input("AWS Region", "eu-west-3", disabled=mode == "Local Fixture Mode")
-        cluster_name = st.text_input("EKS Cluster", "retail-store", disabled=mode == "Local Fixture Mode")
-        st.divider()
-        render_llm_settings()
-        st.divider()
-        st.caption("Read-only simulation. No apply, deploy, or delete actions.")
-    if mode == "Local Fixture Mode" and "twin" not in st.session_state:
-        st.session_state.twin = fixture_for_scenario("S01")
-        st.session_state.twin_source = "Local fixture S01"
-    if page == "Overview":
-        render_overview(mode)
-    elif page == "Infrastructure":
-        render_infrastructure(mode, region, cluster_name)
-    elif page == "Current Twin":
-        render_current_twin(mode)
-    elif page == "Change Assistant":
-        render_change_assistant(mode, region, cluster_name)
+
+        if st.session_state.mode == "live":
+            # --- Live AWS sidebar controls ---
+            st.header("Connect Infrastructure")
+            st.text_input("Provider", value="AWS", disabled=True)
+            region = st.text_input("Region", value="eu-west-3")
+            cluster_name = st.text_input("EKS Cluster", value="retail-store")
+            if st.button("Test Connection", use_container_width=True):
+                with st.spinner("Testing read-only access..."):
+                    try:
+                        st.session_state.connection_results = test_connections(region, cluster_name)
+                    except Exception as exc:
+                        if _is_credential_error(exc):
+                            st.warning(
+                                "⚠️ AWS credentials not configured. "
+                                "Switching to Local Fixture Mode."
+                            )
+                            st.session_state.mode = "local"
+                            st.rerun()
+                        else:
+                            st.error(f"Connection test failed: {exc}")
+            if "connection_results" in st.session_state:
+                render_connection_status(st.session_state.connection_results)
+            st.divider()
+            discover_clicked = st.button("Discover Infrastructure", type="primary", use_container_width=True)
+            st.caption("Uses configured AWS credentials and the active local kubeconfig. Read-only discovery only.")
+        else:
+            # --- Local Fixture sidebar controls ---
+            st.header("Local Fixture Data")
+            st.caption(
+                "Loading a sanitized Current Twin fixture from "
+                "`fixtures/sample_current_state.json`.  No AWS credentials "
+                "required."
+            )
+            region = "eu-west-3"
+            cluster_name = "retail-store"
+            discover_clicked = False
+
+    # ------------------------------------------------------------------
+    # Show a persistent warning banner in Local Fixture Mode
+    # ------------------------------------------------------------------
+    if st.session_state.mode == "local":
+        if not has_creds:
+            st.warning(
+                "⚠️ AWS credentials not configured. Running in **Local Fixture Mode**. "
+                "Switch to *Live AWS Mode* after configuring credentials."
+            )
+        else:
+            st.info(
+                "📂 Running in **Local Fixture Mode**. "
+                "Switch to *Live AWS Mode* in the sidebar to use real infrastructure."
+            )
+
+    # ------------------------------------------------------------------
+    # Discovery / Fixture loading
+    # ------------------------------------------------------------------
+    if st.session_state.mode == "live" and discover_clicked:
+        try:
+            twin, warnings = run_discovery(region, cluster_name)
+            st.session_state.twin = twin
+            st.success("Infrastructure discovery completed successfully.")
+            for warning in warnings:
+                st.warning(warning)
+        except Exception as exc:
+            if _is_credential_error(exc):
+                st.warning(
+                    "⚠️ AWS credentials not configured. "
+                    "Switching to Local Fixture Mode."
+                )
+                st.session_state.mode = "local"
+                st.rerun()
+            else:
+                st.error(f"Discovery failed: {exc}")
+
+    if st.session_state.mode == "local":
+        # In fixture mode, always (re)load the fixture.
+        twin = st.session_state.get("twin")
+        if twin is None:
+            twin = load_fixture()
+            if twin:
+                st.session_state.twin = twin
+            else:
+                st.error(
+                    "Could not load the local fixture file. "
+                    "Please ensure `fixtures/sample_current_state.json` exists."
+                )
     else:
-        render_analysis(mode, region, cluster_name)
+        twin = st.session_state.get("twin") or load_json(STATE_PATH)
+
+    # ------------------------------------------------------------------
+    # Render dashboard, graph, and scenario
+    # ------------------------------------------------------------------
+    if twin:
+        render_dashboard(twin)
+    else:
+        st.info("Connect and discover the infrastructure to populate the dashboard.")
+    st.divider()
+    render_graph()
+    st.divider()
+    render_scenario(twin)
 
 
 if __name__ == "__main__":
