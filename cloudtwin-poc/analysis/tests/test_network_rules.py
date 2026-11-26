@@ -232,9 +232,9 @@ def test_s03_scenario_produces_net_004():
     assert "k8s:deployment:default:ui" in f.affected_resource_ids
 
 
-def test_s03_manifest_is_not_evaluated_until_ingestion_keeps_annotations():
-    # L'ingestion du manifest perd metadata.annotations (donc le schéma internet-facing).
-    # La règle refuse de deviner. Ce test devra passer à FAIL quand Hamdi corrigera l'ingestion.
+def test_s03_manifest_keeps_annotations_and_fails_like_the_scenario():
+    # L'ingestion garde le schéma internet-facing des annotations : le manifest YAML donne
+    # le même résultat que scenario.json (un seul changement service_type_and_scheme).
     result = run(scenario_context("S03", "proposed-service.yaml"))
     [f] = [f for f in result.findings if f.rule_id == "RULE-NET-004"]
-    assert f.status == Status.NOT_EVALUATED
+    assert f.status == Status.FAIL and f.severity == Severity.HIGH
