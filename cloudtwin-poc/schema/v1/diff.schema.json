@@ -15,7 +15,7 @@
         "properties": {
           "resource_id": { "type": "string", "minLength": 1 },
           "change_type": {
-            "enum": ["ADDED", "REMOVED", "MODIFIED", "REPLACED"]
+            "enum": ["ADDED", "REMOVED", "MODIFIED"]
           },
           "property": { "type": "string" },
           "before": {},
@@ -23,17 +23,6 @@
         },
         "additionalProperties": false
       }
-    },
-    "summary": {
-      "type": "object",
-      "properties": {
-        "total_changes": { "type": "integer", "minimum": 0 },
-        "added": { "type": "integer", "minimum": 0 },
-        "removed": { "type": "integer", "minimum": 0 },
-        "modified": { "type": "integer", "minimum": 0 },
-        "replaced": { "type": "integer", "minimum": 0 }
-      },
-      "additionalProperties": true
     }
   },
   "additionalProperties": false

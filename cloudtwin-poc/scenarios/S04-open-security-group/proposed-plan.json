@@ -1,0 +1,19 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "fixture",
+  "resource_changes": [
+    {
+      "address": "aws_security_group.orders_database",
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "orders_database",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["update"],
+        "before": {"id": "sg-fixture-orders-db", "name": "orders-database", "ingress": [{"protocol": "tcp", "from_port": 5432, "to_port": 5432, "cidr_blocks": ["10.0.0.0/16"]}]},
+        "after": {"id": "sg-fixture-orders-db", "name": "orders-database", "ingress": [{"protocol": "tcp", "from_port": 5432, "to_port": 5432, "cidr_blocks": ["10.0.0.0/16", "0.0.0.0/0"]}]},
+        "after_unknown": {}
+      }
+    }
+  ]
+}

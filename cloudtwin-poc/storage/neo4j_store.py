@@ -3,6 +3,15 @@
 Stores infrastructure resources and directed relationships as a replaceable,
 queryable graph snapshot in Neo4j with full idempotence, dependency query
 capabilities, and stale resource lifecycle management.
+
+IMPORTANT: dependency traversal is a storage inspection helper, not Hamdi's
+canonical affected-resource/dependency analysis. The real Neo4j backend still
+stores resource and relationship identity globally; relationship properties and
+``last_seen_snapshot`` therefore describe the latest import. Snapshot membership
+is retained through ``CONTAINS_RESOURCE``, but real-backend traversal is not yet
+historically snapshot-isolated. Callers must not present it as blast radius or a
+snapshot-accurate impact result. The in-memory backend does filter traversal by
+snapshot membership for deterministic local tests.
 """
 
 from __future__ import annotations
@@ -10,16 +19,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sys
 import uuid
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
 
 logger = logging.getLogger("cloudtwin.storage")
 
@@ -527,6 +531,11 @@ class RealNeo4jBackend:
         direction: str = "outgoing",
         snapshot_id: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Inspect neighbours; not canonical affected-resource analysis.
+
+        ``snapshot_id`` is not yet enforced by the real backend. Snapshot-
+        isolated relationship storage requires a later data-model migration.
+        """
         results: list[dict[str, Any]] = []
 
         with self.driver.session(database=self.database) as session:
@@ -559,6 +568,10 @@ class RealNeo4jBackend:
         max_depth: int = 10,
         snapshot_id: str | None = None,
     ) -> dict[str, Any]:
+        """Inspect reachable nodes; not blast-radius/impact analysis.
+
+        ``snapshot_id`` has the same real-backend limitation as direct queries.
+        """
         results: list[dict[str, Any]] = []
         edges: list[dict[str, str]] = []
         seen_edges: set[tuple[str, str, str]] = set()
@@ -655,7 +668,7 @@ class Neo4jTwinStore:
     - Snapshot metadata tracking and lineage association.
     - Stale resource retention (historical snapshot association) or removal (pruning).
     - Direct and transitive dependency querying with configurable depth.
-    - Automatic local fallback to in-memory graph backend when Neo4j is offline.
+    - Explicit in-memory fixture backend; connection failures are never hidden.
     """
 
     def __init__(
@@ -686,7 +699,7 @@ class Neo4jTwinStore:
             self.init_schema()
             return
 
-        if target_uri and use_in_memory is not False:
+        if target_uri:
             try:
                 import neo4j
                 auth_tuple = (target_user, target_pass) if target_pass else None
@@ -698,15 +711,12 @@ class Neo4jTwinStore:
                 logger.info("Connected to Neo4j instance at %s", target_uri)
                 return
             except Exception as exc:
-                if use_in_memory is False:
-                    raise ConnectionError(f"Failed to connect to Neo4j at {target_uri}: {exc}") from exc
-                logger.warning(
-                    "Neo4j connection to %s failed (%s); falling back to in-memory store",
-                    target_uri,
-                    exc,
-                )
+                raise ConnectionError(f"Failed to connect to Neo4j at {target_uri}: {exc}") from exc
 
-        # Default fallback for local offline fixture usage
+        if use_in_memory is False:
+            raise ValueError("Neo4j URI or driver is required when use_in_memory=False")
+
+        # Explicit/default local fixture mode when no Neo4j endpoint was supplied.
         self._backend = InMemoryGraphBackend()
         self._mode = "in_memory"
         logger.info("Neo4jTwinStore active in local in-memory fixture mode")
@@ -992,4 +1002,3 @@ def _run_cli() -> int:
 if __name__ == "__main__":
     import sys
     sys.exit(_run_cli())
-

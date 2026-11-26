@@ -3,13 +3,8 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from typing import Any
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
 
 from ingestion.kubernetes_ingester import KubernetesManifestIngester
 from ingestion.models import (
@@ -145,66 +140,3 @@ class ChangeIngester:
                 pass
             return json.loads(twin)
         raise TypeError(f"Unsupported twin type: {type(twin)}")
-
-
-def _run_cli() -> int:
-    import argparse
-    root_dir = Path(__file__).resolve().parents[1]
-    default_twin = root_dir / "fixtures" / "sample_current_state.json"
-
-    parser = argparse.ArgumentParser(description="Ingest proposed infrastructure changes into normalized records.")
-    parser.add_argument(
-        "--file", "-f",
-        type=Path,
-        required=True,
-        help="Path to scenario JSON, Terraform plan JSON, or Kubernetes manifest YAML/JSON",
-    )
-    parser.add_argument(
-        "--twin", "-t",
-        type=Path,
-        default=default_twin,
-        help="Path to Current Twin snapshot fixture (for canonical ID resolution)",
-    )
-    parser.add_argument(
-        "--kind", "-k",
-        type=str,
-        default=None,
-        choices=["scenario", "terraform_plan", "kubernetes_manifest"],
-        help="Explicit input kind (auto-detected if omitted)",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Print raw JSON output conforming to the integration contract",
-    )
-
-    args = parser.parse_args()
-
-    ingester = ChangeIngester(current_twin=args.twin)
-    change_set = ingester.ingest(args.file, kind=args.kind)
-
-    if args.json:
-        print(json.dumps(change_set.to_dict(), indent=2))
-        return 0
-
-    print(f"\n[*] Source: {args.file} (kind: {change_set.source_kind})")
-    print(f"[*] Ingested {len(change_set)} normalized change(s):\n")
-
-    for c in change_set.changes:
-        op_tag = f"[{c.operation.value.upper()}]"
-        print(f"  {op_tag:<10} {c.resource_id}")
-        print(f"             Type: {c.resource_type} ({c.provider})")
-        if c.namespace:
-            print(f"             Namespace: {c.namespace}")
-        print(f"             Property: {c.property_path}")
-        print(f"             Before: {c.before}")
-        print(f"             After:  {c.after}")
-        print()
-
-    return 0
-
-
-if __name__ == "__main__":
-    import sys
-    sys.exit(_run_cli())
-

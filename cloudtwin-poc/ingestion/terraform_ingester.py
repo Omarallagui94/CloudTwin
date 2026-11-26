@@ -40,6 +40,9 @@ class TerraformPlanIngester:
 
         changes: list[NormalizedChange] = []
         change_idx = 1
+        ignored_non_semantic: list[dict[str, str]] = []
+        unsupported_material: list[dict[str, str]] = []
+        non_semantic_types = {"null_resource", "time_sleep", "random_bytes"}
 
         for rc in resource_changes:
             # Skip non-managed items
@@ -68,13 +71,25 @@ class TerraformPlanIngester:
 
             is_create = (operation == OperationType.CREATE)
 
-            canonical_id, canonical_type, provider = self.resolver.resolve_terraform_target(
-                tf_type=tf_type,
-                tf_name=tf_name,
-                before_state=before_state,
-                after_state=after_state,
-                is_create=is_create,
-            )
+            try:
+                canonical_id, canonical_type, provider = self.resolver.resolve_terraform_target(
+                    tf_type=tf_type,
+                    tf_name=tf_name,
+                    before_state=before_state,
+                    after_state=after_state,
+                    is_create=is_create,
+                )
+            except ValueError as error:
+                coverage_item = {
+                    "address": address,
+                    "type": tf_type,
+                    "reason": str(error),
+                }
+                if tf_type in non_semantic_types:
+                    ignored_non_semantic.append(coverage_item)
+                else:
+                    unsupported_material.append(coverage_item)
+                continue
 
             source_meta = {
                 "kind": "terraform_plan",
@@ -182,6 +197,15 @@ class TerraformPlanIngester:
                 "format_version": data.get("format_version"),
                 "terraform_version": data.get("terraform_version"),
                 "total_changes": len(changes),
+                "terraform_coverage": {
+                    "status": "complete" if not unsupported_material else "partial",
+                    "total_resource_changes": len(
+                        [item for item in resource_changes if item.get("mode") == "managed"]
+                    ),
+                    "normalized_supported": len(changes),
+                    "ignored_non_semantic": ignored_non_semantic,
+                    "unsupported_material": unsupported_material,
+                },
             },
         )
 
@@ -224,7 +248,9 @@ class TerraformPlanIngester:
         if isinstance(plan, dict):
             return plan
         if isinstance(plan, Path):
-            return json.loads(plan.read_text(encoding="utf-8"))
+            # PowerShell commonly writes redirected `terraform show -json`
+            # output with a UTF-8 BOM. Accept it as valid JSON input.
+            return json.loads(plan.read_text(encoding="utf-8-sig"))
         if isinstance(plan, str):
             try:
                 p = Path(plan)
@@ -234,4 +260,3 @@ class TerraformPlanIngester:
                 pass
             return json.loads(plan)
         raise InvalidChangeInputError(f"Unsupported plan input type: {type(plan)}")
-

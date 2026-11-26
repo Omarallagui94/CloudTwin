@@ -1,0 +1,15 @@
+{
+  "metadata": {"fixture": true, "schema": "cloudtwin-current-twin-v1", "source": "sanitized-local"},
+  "resources": [
+    {"id": "k8s:deployment:default:orders", "name": "orders", "type": "DEPLOYMENT", "provider": "kubernetes", "properties": {"namespace": "default", "replicas": 1}},
+    {"id": "k8s:service:default:orders", "name": "orders", "type": "SERVICE", "provider": "kubernetes", "properties": {"namespace": "default", "service_type": "ClusterIP"}},
+    {"id": "k8s:service:default:orders-postgresql", "name": "orders-postgresql", "type": "SERVICE", "provider": "kubernetes", "properties": {"namespace": "default", "service_type": "ClusterIP", "ports": [{"name": "postgresql", "port": 5432, "target_port": "postgresql", "protocol": "TCP"}]}},
+    {"id": "k8s:statefulset:default:orders-postgresql", "name": "orders-postgresql", "type": "STATEFUL_SET", "provider": "kubernetes", "properties": {"namespace": "default", "replicas": 1, "ready_replicas": 1}}
+  ],
+  "relationships": [
+    {"source": "k8s:service:default:orders", "target": "k8s:deployment:default:orders", "type": "EXPOSES"},
+    {"source": "k8s:deployment:default:orders", "target": "k8s:service:default:orders-postgresql", "type": "DEPENDS_ON"},
+    {"source": "k8s:service:default:orders-postgresql", "target": "k8s:statefulset:default:orders-postgresql", "type": "EXPOSES"}
+  ],
+  "summary": {"aws_resources": 0, "kubernetes_resources": 4, "relationships": 3}
+}

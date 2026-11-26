@@ -1,13 +1,7 @@
 
 import json
-import sys
 import unittest
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -18,6 +12,8 @@ from discovery.aws_collector import AWSCollector
 from discovery.kubernetes_collector import KubernetesCollector
 from discovery.normalizer import normalize
 
+
+ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "fixtures" / "sample_current_state.json"
 
 

@@ -1,0 +1,11 @@
+{
+  "scenario_id": "S04",
+  "expected_changed_resource": "aws:security-group:sg-fixture-orders-db",
+  "expected_property_change": {
+    "property": "ingress_rules",
+    "before": [{"protocol": "tcp", "from_port": 5432, "to_port": 5432, "cidr_blocks": ["10.0.0.0/16"]}],
+    "after": [{"protocol": "tcp", "from_port": 5432, "to_port": 5432, "cidr_blocks": ["10.0.0.0/16", "0.0.0.0/0"]}]
+  },
+  "structurally_involved_resources": ["k8s:statefulset:default:orders-postgresql", "aws:internet"],
+  "expected_direction": {"exposure": "increase", "availability": "unchanged"}
+}
