@@ -82,6 +82,26 @@ streamlit run app.py
 
 Use **Test Connection** in the sidebar, then **Discover Infrastructure** to regenerate both output files from the current environment.
 
+## Run the HTTP API
+
+The API exposes the same simulation as the dashboard and `python -m simulation` (no AWS or Kubernetes call):
+
+```bat
+uvicorn api.main:app --reload
+```
+
+Interactive documentation: http://localhost:8000/docs. Main routes:
+
+| Route | Purpose |
+| --- | --- |
+| `GET /health` | API status and number of rules |
+| `GET /rules` | Rule catalog |
+| `GET /scenarios` | Demonstration scenarios S01 to S05 |
+| `POST /simulations` | Simulate a change sent in the body (Current Twin + Terraform plan, Kubernetes manifest or scenario) |
+| `POST /simulations/scenario/{id}` | Simulate a demonstration scenario (`?explain=true&fixes=true` adds the AI explanation and verified fixes) |
+
+Unreadable input returns `400` with the reason; an unknown scenario returns `404`.
+
 ## Proposed future change
 
 `scenarios\scenario-01.json` describes a proposed increase of the `ui` Deployment from one to three replicas. It is not applied. A later Future Twin engine can consume this scenario, create a virtual future state, compare it with the Current Twin, and assess impact and risk.

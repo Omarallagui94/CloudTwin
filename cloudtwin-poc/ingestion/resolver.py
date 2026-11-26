@@ -18,6 +18,7 @@ VALID_RESOURCE_TYPES = frozenset({
     "EKS_NODE_GROUP",
     "LOAD_BALANCER",
     "IAM_ROLE",
+    "RDS_INSTANCE",
     "NAMESPACE",
     "NODE",
     "DEPLOYMENT",
@@ -51,6 +52,7 @@ AWS_TYPES = frozenset({
     "EKS_NODE_GROUP",
     "LOAD_BALANCER",
     "IAM_ROLE",
+    "RDS_INSTANCE",
 })
 
 # Kubernetes kinds without a namespace: their canonical ID is k8s:<slug>:<name>.
@@ -112,6 +114,9 @@ TYPE_NORMALIZATION: dict[str, tuple[str, str, str]] = {
     "aws_alb": ("LOAD_BALANCER", "aws", "load-balancer"),
     "iam_role": ("IAM_ROLE", "aws", "iam-role"),
     "aws_iam_role": ("IAM_ROLE", "aws", "iam-role"),
+    "rds": ("RDS_INSTANCE", "aws", "rds-instance"),
+    "rds_instance": ("RDS_INSTANCE", "aws", "rds-instance"),
+    "aws_db_instance": ("RDS_INSTANCE", "aws", "rds-instance"),
 }
 
 RESOURCE_ID_REGEX = re.compile(r"^(aws:internet|(?:aws|k8s):[a-z][a-z0-9-]*:.+)$")
@@ -188,6 +193,11 @@ class CanonicalResourceResolver:
                     sg_id = props.get("group_id") or props.get("security_group_id")
                     if sg_id:
                         self.native_id_index[sg_id] = r_id
+                elif r_type == "RDS_INSTANCE":
+                    for key in ("db_instance_identifier", "DBInstanceIdentifier", "identifier",
+                                "dbi_resource_id", "DbiResourceId", "arn", "DBInstanceArn"):
+                        if props.get(key):
+                            self.native_id_index[props[key]] = r_id
                 elif r_type == "EC2_INSTANCE" and props.get("instance_id"):
                     self.native_id_index[props["instance_id"]] = r_id
                 elif r_type in ("IAM_ROLE", "LOAD_BALANCER"):
@@ -277,6 +287,11 @@ class CanonicalResourceResolver:
                 if direct_arn_id in self.resources_by_id:
                     return direct_arn_id, canonical_type, provider
 
+            # aws_db_instance : le nom de la base est `identifier` (l'`id` est un identifiant interne)
+            identifier = before_state.get("identifier")
+            if identifier and identifier in self.native_id_index:
+                return self.native_id_index[identifier], canonical_type, provider
+
             # Check tags.Name
             tags = before_state.get("tags") or {}
             if isinstance(tags, dict) and "Name" in tags:
@@ -297,6 +312,8 @@ class CanonicalResourceResolver:
                     target_name = tags["Name"]
                 elif "name" in after_state and after_state["name"]:
                     target_name = after_state["name"]
+                elif after_state.get("identifier"):
+                    target_name = after_state["identifier"]
 
             # Format canonical ID: provider:slug:name
             canonical_id = f"{provider}:{slug}:{target_name}"

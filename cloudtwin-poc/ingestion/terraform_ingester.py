@@ -14,6 +14,7 @@ from ingestion.models import (
     UnresolvedTargetError,
 )
 from ingestion.resolver import CanonicalResourceResolver
+from ingestion.terraform_linked import LINKED_TYPES, Ignored, LinkedResourceError, LinkedResources
 
 
 class TerraformPlanIngester:
@@ -43,6 +44,7 @@ class TerraformPlanIngester:
         ignored_non_semantic: list[dict[str, str]] = []
         unsupported_material: list[dict[str, str]] = []
         non_semantic_types = {"null_resource", "time_sleep", "random_bytes"}
+        linked = LinkedResources(data, self.resolver)
 
         for rc in resource_changes:
             # Skip non-managed items
@@ -64,6 +66,21 @@ class TerraformPlanIngester:
             operation = self._map_actions_to_operation(actions)
             if operation is None:
                 # no-op or read
+                continue
+
+            # Politiques IAM et règles de Security Group déclarées à part : elles
+            # modifient le rôle ou le Security Group qu'elles visent (terraform_linked.py).
+            if tf_type in LINKED_TYPES:
+                try:
+                    linked_changes = linked.changes_for(rc, operation, change_idx)
+                except Ignored as reason:
+                    ignored_non_semantic.append({"address": address, "type": tf_type, "reason": str(reason)})
+                    continue
+                except LinkedResourceError as error:
+                    unsupported_material.append({"address": address, "type": tf_type, "reason": str(error)})
+                    continue
+                changes.extend(linked_changes)
+                change_idx += len(linked_changes)
                 continue
 
             before_state = change_obj.get("before")
