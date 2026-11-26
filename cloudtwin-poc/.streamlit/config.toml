@@ -1,0 +1,56 @@
+# Thème CloudTwin : lu par Streamlit quand on lance `streamlit run app.py` depuis cloudtwin-poc/.
+# Les polices sont servies depuis static/fonts : la démo marche aussi sans Internet.
+
+[server]
+enableStaticServing = true
+
+[theme]
+base = "light"
+primaryColor = "#0E7C86"
+backgroundColor = "#EEF2F6"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#1B2433"
+font = "IBM Plex Sans, system-ui, sans-serif"
+codeFont = "IBM Plex Mono, ui-monospace, monospace"
+baseRadius = "8px"
+borderColor = "#D5DDE7"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-400-normal.woff2"
+weight = 400
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-500-normal.woff2"
+weight = 500
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-600-normal.woff2"
+weight = 600
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-700-normal.woff2"
+weight = 700
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "app/static/fonts/ibm-plex-mono-latin-400-normal.woff2"
+weight = 400
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "app/static/fonts/ibm-plex-mono-latin-500-normal.woff2"
+weight = 500
+
+[theme.sidebar]
+backgroundColor = "#1B2433"
+secondaryBackgroundColor = "#26324A"
+textColor = "#DCE3EE"
+primaryColor = "#5FC4CC"
+borderColor = "#34425C"
+
+[client]
+toolbarMode = "viewer"

@@ -35,6 +35,7 @@ from visualization.simulation_view import (
     ATTACK_EDGE, HIGHLIGHT, impact_graph_html, llm_client, render_ai, render_fixes,
     render_llm_settings,
 )
+from visualization import ui
 from visualization.build_graph import (
     allowed_types, build_graph, legend_items, project_diff, project_twin, readable_label,
 )
@@ -77,37 +78,29 @@ def configure_page() -> None:
     st.markdown(
         """
         <style>
-        .stApp { background: #f7f9fc; color: #172033; }
-        .block-container { max-width: 1450px; padding-top: 1.7rem; padding-bottom: 3rem; }
-        [data-testid="stSidebar"] { background: #0f172a; }
-        [data-testid="stSidebar"] * { color: #e2e8f0; }
         .hero { padding: 2rem; border-radius: 18px; color: white; background: linear-gradient(125deg,#0f172a,#164e63); box-shadow: 0 12px 32px rgba(15,23,42,.16); }
         .hero h1 { margin: 0; font-size: 2.45rem; letter-spacing: -.03em; }
         .hero p { margin: .45rem 0 0; color: #bae6fd; font-size: 1.12rem; }
-        .eyebrow { font-size: .76rem; letter-spacing: .12em; text-transform: uppercase; font-weight: 750; color: #64748b; }
-        .card { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1rem 1.1rem; box-shadow: 0 3px 12px rgba(15,23,42,.045); min-height: 96px; }
-        .metric-value { font-size: 1.65rem; font-weight: 760; color: #0f172a; margin-top: .3rem; }
         .status-row { background: white; border: 1px solid #e2e8f0; border-radius: 11px; padding: .8rem 1rem; margin: .45rem 0; display: flex; justify-content: space-between; align-items: center; }
         .badge { border-radius: 999px; padding: .23rem .62rem; font-size: .72rem; font-weight: 760; }
         .ready { background:#dcfce7; color:#166534; } .partial { background:#fef3c7; color:#92400e; } .future { background:#e2e8f0; color:#475569; }
         .flow { display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; margin:1rem 0; }
         .flow-step { background:white; border:1px solid #cbd5e1; border-radius:10px; padding:.65rem .8rem; font-weight:680; color:#1e293b; }
         .flow-arrow { color:#94a3b8; font-weight:800; }
-        .proposal { background:#fff; border:1px solid #cbd5e1; border-left:5px solid #0e7490; border-radius:12px; padding:1.1rem 1.25rem; }
-        .safe-note { background:#ecfeff; border:1px solid #a5f3fc; color:#155e75; border-radius:10px; padding:.75rem 1rem; }
+        .proposal { background:#fff; border:1px solid #cbd5e1; border-left:5px solid #0E7C86; border-radius:12px; padding:1.1rem 1.25rem; }
         .pipeline-done { color:#166534; font-weight:700; } .pipeline-next { color:#64748b; }
         .sim-card { background:white; border:1px solid #dbe3ee; border-radius:14px; padding:1rem 1.1rem; min-height:105px; }
         .sim-card strong { color:#0f172a; font-size:1.05rem; }
         .sim-id { color:#64748b; font-size:.72rem; margin-top:.35rem; overflow-wrap:anywhere; }
         .sim-value { font-size:1.65rem; font-weight:780; color:#0f172a; margin:.35rem 0; }
-        .sim-future { border-top:4px solid #0e7490; } .sim-removed { border-top:4px solid #b91c1c; opacity:.78; }
+        .sim-future { border-top:4px solid #0E7C86; } .sim-removed { border-top:4px solid #b91c1c; opacity:.78; }
         .sim-removed strong { text-decoration:line-through; }
         .diff-stat { background:white; border:1px solid #e2e8f0; border-radius:12px; padding:.75rem 1rem; }
         .diff-stat.active { border-color:#94a3b8; box-shadow:0 3px 10px rgba(15,23,42,.07); }
         .diff-number { font-size:1.55rem; font-weight:780; color:#64748b; } .diff-stat.active .diff-number { color:#0f172a; }
         .relationship-card { background:white; border-left:4px solid #b91c1c; border-radius:10px; padding:.8rem 1rem; margin:.55rem 0; }
         </style>
-        """,
+        """ + ui.CSS,
         unsafe_allow_html=True,
     )
 
@@ -243,85 +236,72 @@ def render_pipeline(
         ("State Diff", diff_ready),
     ]
     affected_ready = bool(st.session_state.get("affected_resources"))
-    st.markdown("#### CloudTwin pipeline")
-    left, right = st.columns(2)
-    with left:
-        for item, done in stages:
-            style, marker, suffix = (
-                ("pipeline-done", "✓", "") if done
-                else ("pipeline-next", "◌", " — awaiting prior stage")
-            )
-            status = " — COMPLETE" if done else suffix
-            st.markdown(f'<div class="{style}">{marker} {item}{status}</div>', unsafe_allow_html=True)
-        for item in ("Security Analysis", "Resilience Analysis"):
-            style = "pipeline-done" if analysis_ready else "pipeline-next"
-            status = "COMPLETE" if analysis_ready else "AWAITING CHANGE"
-            st.markdown(f'<div class="{style}">{item} — {status}</div>', unsafe_allow_html=True)
     explanation = st.session_state.get("analysis_explanation") or {}
     ai_ready = analysis_ready and bool(explanation)
-    ai_status = ("COMPLETE — LLM" if explanation.get("source") == "llm"
-                 else "COMPLETE — texte de secours") if ai_ready else "AWAITING CHANGE"
     fixes_ready = any(entry[1] for entry in (st.session_state.get("ai_cache") or {}).values())
-    with right:
-        for item, done, status in (
-            ("Affected Resources", affected_ready, None), ("Blast Radius", analysis_ready, None),
-            ("Risk Score", analysis_ready, None), ("AI Explanation", ai_ready, ai_status),
-            ("Verified Fixes", fixes_ready, "COMPLETE" if fixes_ready
-             else ("READY — onglet Correctifs vérifiés" if analysis_ready else "AWAITING CHANGE")),
-        ):
-            style = "pipeline-done" if done else "pipeline-next"
-            status = status or ("COMPLETE" if done else "AWAITING CHANGE")
-            st.markdown(f'<div class="{style}">{item} — {status}</div>', unsafe_allow_html=True)
+    stages += [
+        ("Affected Resources", affected_ready), ("Security Analysis", analysis_ready),
+        ("Resilience Analysis", analysis_ready), ("Blast Radius", analysis_ready),
+        ("Risk Score", analysis_ready), ("AI Explanation", ai_ready), ("Verified Fixes", fixes_ready),
+    ]
+    note = None
+    if ai_ready:
+        note = ("Explication rédigée par le LLM local." if explanation.get("source") == "llm"
+                else "Explication : texte de secours, sans LLM. Active Ollama dans la barre latérale.")
+    st.markdown("#### Pipeline CloudTwin")
+    st.markdown(ui.pipeline_track(stages, note), unsafe_allow_html=True)
+
+
+def scenario_rows() -> list[dict[str, Any]]:
+    """Score simulé de chaque scénario du pack, pour le tableau de l'Overview."""
+    rows = []
+    for sid, scenario in scenarios().items():
+        row: dict[str, Any] = {"id": sid, "name": scenario.get("name", sid)}
+        twin = fixture_for_scenario(sid)
+        try:
+            changeset = ChangeIngester(twin).ingest_scenario(scenario)
+            future = future_twin_for(twin, changeset)
+            context = context_from_changeset(changeset, twin, future_twin=future)
+            result = run_analysis(context).model_dump(mode="json")
+            row["score"] = result["risk"]["score"]
+            row["failed"] = [f["rule_id"] for f in result["findings"] if f["status"] == "fail"]
+        except (IngestionError, SimulationError, ValueError, KeyError, TypeError) as exc:
+            row["error"] = str(exc)
+        rows.append(row)
+    return rows
 
 
 def render_overview(mode: str) -> None:
-    st.markdown('<div class="hero"><div class="eyebrow" style="color:#67e8f9">Cloud infrastructure intelligence</div><h1>CloudTwin AI</h1><p>Digital Twin for AWS &amp; Kubernetes</p></div>', unsafe_allow_html=True)
-    st.write("")
-    st.markdown("### From live infrastructure to explainable change analysis")
-    steps = ["Live Infrastructure", "Discovery", "Current Twin", "Change Ingestion", "Analysis"]
-    flow = []
-    for index, step in enumerate(steps):
-        flow.append(f'<span class="flow-step">{step}</span>')
-        if index < len(steps) - 1:
-            flow.append('<span class="flow-arrow">→</span>')
-    st.markdown(f'<div class="flow">{"".join(flow)}</div>', unsafe_allow_html=True)
-    st.caption("Available today: sanitized local fixtures or read-only live discovery. No infrastructure mutation is performed.")
+    st.markdown(ui.page_head(
+        "CloudTwin AI",
+        "Simulez un changement AWS ou Kubernetes sur un jumeau numérique, et mesurez son risque "
+        "avant de le déployer. Rien n'est jamais modifié sur l'infrastructure réelle.",
+    ), unsafe_allow_html=True)
     twin = st.session_state.get("twin") or {}
     resources, relationships = twin.get("resources", []), twin.get("relationships", [])
-    columns = st.columns(5)
+    result = st.session_state.get("analysis_result")
+    columns = st.columns(3)
     values = [
-        ("Datasource", mode), ("Current Twin", "Available" if twin else "Not available"),
-        ("Resources", len(resources)), ("Relationships", len(relationships)),
-        ("Latest simulation", "Complete" if st.session_state.get("analysis_result") else "Not available"),
+        ("Source des données", "Fixtures locales" if mode == "Local Fixture Mode" else "AWS en lecture seule"),
+        ("Current Twin", f"{len(resources)} ressource{'s' * (len(resources) > 1)}, {len(relationships)} relation{'s' * (len(relationships) > 1)}" if twin else "Non chargé"),
+        ("Dernière simulation",
+         f"{result['risk']['score']}/100, risque {result['risk']['label'].lower()}" if result else "Aucune"),
     ]
     for column, (label, value) in zip(columns, values):
         with column:
             metric_card(label, value)
+    st.write("")
     render_pipeline(
         parsed=bool(st.session_state.get("pending_scenario")),
         changeset_ready=bool(st.session_state.get("confirmed_changeset")),
         future_ready=bool(st.session_state.get("future_twin")),
         diff_ready=bool(st.session_state.get("state_diff")),
-        analysis_ready=bool(st.session_state.get("analysis_result")),
+        analysis_ready=bool(result),
     )
-    st.markdown("### Scenario analysis preview")
-    available = scenarios()
-    selected = st.selectbox(
-        "Scenario pack", list(available), format_func=lambda sid: f"{sid} — {available[sid]['name']}",
-        key="overview-scenario",
-    )
-    twin = fixture_for_scenario(selected)
-    try:
-        changeset = ChangeIngester(twin).ingest_scenario(available[selected])
-        result = run_analysis(context_from_changeset(changeset, twin)).model_dump(mode="json")
-        replica = next((finding for finding in result["findings"] if finding["rule_id"] == "RULE-RES-001"), None)
-        if replica and replica["status"] == "fail":
-            st.error(f"ACTIVE {replica['severity'].upper()}-SEVERITY FINDING — {replica['title']}")
-        else:
-            st.success("PASS — no active resilience finding")
-            st.caption("Potential rule severity if it fails: HIGH")
-    except (IngestionError, ValueError) as exc:
-        st.warning(f"Scenario preview unavailable: {exc}")
+    st.markdown("#### Les cinq scénarios de démonstration")
+    st.caption("Chaque changement est simulé sur sa fixture et analysé par les 11 règles. "
+               "Ouvre Change Assistant pour en simuler un en détail.")
+    st.markdown(ui.scenario_board(scenario_rows()), unsafe_allow_html=True)
 
 
 def render_connection_status(results: dict[str, dict[str, Any]]) -> None:
@@ -862,43 +842,35 @@ def render_change_assistant(mode: str, region: str, cluster_name: str) -> None:
 def render_analysis_result(result: dict[str, Any]) -> None:
     findings = result.get("findings", [])
     if not findings:
-        st.info("No implemented Fatma rule applies to this change yet.")
+        st.info("Aucune règle ne s'applique à ce changement.")
         return
-    for category in ("security", "resilience"):
-        st.markdown(f"### {category.title()} Findings")
-        selected = [finding for finding in findings if finding.get("category") == category]
-        if not selected:
-            st.info(f"No {category} finding applies to this change.")
-        for finding in selected:
-            status, severity = finding["status"], finding["severity"].upper()
-            label = f"{finding['rule_id']} — {finding['title']}"
-            if status == "fail":
-                st.error(f"ACTIVE {severity}-SEVERITY FINDING — {label}")
-            elif status == "pass":
-                st.success(f"PASS — {label}")
-                st.caption(f"Potential rule severity if violated: {severity}")
-            else:
-                st.warning(f"NOT EVALUATED — {label}")
-            st.write(finding["description"])
-            if finding.get("remediation"):
-                st.markdown(f"**Recommendation:** {finding['remediation']}")
-            with st.expander(f"Evidence — {finding['rule_id']}"):
-                st.json(finding.get("evidence", {}))
+    order = ["critical", "high", "medium", "low"]
+    failed = sorted((f for f in findings if f["status"] == "fail"),
+                    key=lambda f: order.index(f["severity"]) if f["severity"] in order else len(order))
+    unknown = [f for f in findings if f["status"] == "not_evaluated"]
+    passed = [f for f in findings if f["status"] == "pass"]
 
-    radius = result.get("blast_radius") or {}
-    st.markdown("### Blast Radius")
-    st.write(f"Direct: {len(radius.get('direct', []))} · Indirect: {len(radius.get('indirect', []))}")
-    if radius.get("direct"):
-        st.code("\n".join(radius["direct"]))
-    if radius.get("indirect"):
-        st.code("\n".join(radius["indirect"]))
+    st.markdown(f"### Risques actifs ({len(failed)})")
+    if not failed:
+        st.success("Aucun risque actif : toutes les règles évaluées passent.")
+    for finding in failed:
+        st.markdown(ui.finding_card(finding), unsafe_allow_html=True)
+        with st.expander(f"Preuves de {finding['rule_id']}"):
+            st.json(finding.get("evidence", {}))
+    if unknown:
+        with st.expander(f"{len(unknown)} règle(s) non évaluée(s) : données manquantes"):
+            st.markdown(ui.quiet_list(unknown), unsafe_allow_html=True)
+    if passed:
+        with st.expander(f"{len(passed)} règle(s) vérifiée(s) sans risque"):
+            st.markdown(ui.quiet_list(passed), unsafe_allow_html=True)
 
     risk = result.get("risk") or {}
-    st.markdown("### Risk")
-    st.metric("Risk Score", f"{risk.get('score', 0)} / 100", risk.get("label", "Unknown"))
-    st.write(risk.get("explanation", "No score explanation available."))
-    st.caption(f"Findings: {risk.get('findings_points', 0)} · Blast radius: {risk.get('blast_radius_bonus', 0)}")
-
+    radius = result.get("blast_radius") or {}
+    with st.expander("Détail du calcul du score"):
+        st.write(risk.get("explanation", ""))
+        st.caption(risk.get("formula", ""))
+        st.write(f"Blast radius : {len(radius.get('direct', []))} ressource(s) directe(s), "
+                 f"{len(radius.get('indirect', []))} indirecte(s).")
 
 
 def ai_outputs(run: bool = False) -> tuple[dict[str, Any], dict[str, Any], list[str]] | None:
@@ -950,36 +922,29 @@ def render_attack_graph(changeset: dict[str, Any], result: dict[str, Any]) -> No
 
 
 def render_analysis(mode: str, region: str, cluster_name: str) -> None:
-    st.title("Analysis")
     result = st.session_state.get("analysis_result")
     changeset = st.session_state.get("confirmed_changeset")
     if not result or not changeset:
-        st.info("Confirm a proposed change in Change Assistant to run the currently available analysis.")
+        st.markdown(ui.page_head(
+            "Analysis", "Confirme un changement dans Change Assistant : son analyse de risque s'affiche ici.",
+        ), unsafe_allow_html=True)
         render_pipeline()
         return
-    render_simulation_experience(
-        st.session_state["pending_scenario"],
-        changeset,
-        st.session_state["state_diff"],
-        st.session_state["pending_twin"],
-        st.session_state["future_twin"],
-        datasource_mode=mode,
-        aws_region=region,
-        eks_cluster=cluster_name,
-    )
+    scenario = st.session_state["pending_scenario"]
+    st.markdown(ui.page_head("Analysis", scenario.get("name", "Changement proposé")), unsafe_allow_html=True)
+    st.markdown(ui.verdict_strip(result.get("risk") or {}, result.get("findings", [])), unsafe_allow_html=True)
     for warning in st.session_state.get("simulation_warnings") or []:
         st.caption(f"Simulation : {warning}")
-    st.header("Analyse de risque")
-    tabs = st.tabs(["Risque", "Impact et chemin d'attaque", "Analyste IA", "Correctifs vérifiés"])
+    tabs = st.tabs(["Risque", "Impact et chemin d'attaque", "Analyste IA", "Correctifs vérifiés", "Simulation"])
     with tabs[0]:
         render_analysis_result(result)
-        st.info("Structural affected resources are shown separately from Fatma's blast radius and risk interpretation.")
     with tabs[1]:
         render_attack_graph(changeset, result)
+        st.caption("Les ressources impactées structurellement sont détaillées dans l'onglet Simulation.")
     ai = ai_outputs()
     with tabs[2]:
         if ai is None:
-            st.info("Clique pour interroger le LLM local (quelques secondes).")
+            st.info("Ollama est activé : l'appel prend quelques secondes.")
             if st.button("Demander à l'analyste IA", type="primary"):
                 ai = ai_outputs(run=True)
                 st.rerun()
@@ -990,6 +955,18 @@ def render_analysis(mode: str, region: str, cluster_name: str) -> None:
             st.info("Les correctifs apparaissent après la réponse de l'analyste IA (onglet Analyste IA).")
         else:
             render_fixes(ai[1], ai[2])
+    with tabs[4]:
+        render_simulation_experience(
+            scenario,
+            changeset,
+            st.session_state["state_diff"],
+            st.session_state["pending_twin"],
+            st.session_state["future_twin"],
+            datasource_mode=mode,
+            aws_region=region,
+            eks_cluster=cluster_name,
+        )
+    st.divider()
     render_pipeline(
         parsed=True,
         changeset_ready=True,
@@ -1002,8 +979,7 @@ def render_analysis(mode: str, region: str, cluster_name: str) -> None:
 def main() -> None:
     configure_page()
     with st.sidebar:
-        st.markdown("## ☁️ CloudTwin")
-        st.caption("AWS & Kubernetes Digital Twin")
+        st.markdown(ui.brand(), unsafe_allow_html=True)
         page = st.radio("Navigation", PAGES, label_visibility="collapsed")
         st.divider()
         mode = st.radio("Data source", ["Local Fixture Mode", "Live AWS Mode"])

@@ -67,9 +67,11 @@ def test_s01_confirmed_analysis_is_pass_with_potential_severity_only():
     assert ">1<" in page_markdown and ">3<" in page_markdown
     app.radio[0].set_value("Analysis").run()
     assert not app.exception
-    assert any("PASS" in item.value for item in app.success)
-    assert not any("ACTIVE HIGH-SEVERITY" in item.value for item in app.error)
-    assert any("Potential rule severity if violated: HIGH" in item.value for item in app.caption)
+    assert any("Aucun risque actif" in item.value for item in app.success)
+    markdown = "\n".join(item.value for item in app.markdown)
+    assert 'class="finding"' not in markdown
+    assert "Risque <span>faible</span>" in markdown          # bande de verdict
+    assert any("vérifiée(s) sans risque" in item.label for item in app.expander)
 
 
 def test_s02_confirmed_analysis_is_an_active_high_severity_finding():
@@ -80,7 +82,9 @@ def test_s02_confirmed_analysis_is_an_active_high_severity_finding():
     assert ">3<" in page_markdown and ">1<" in page_markdown
     app.radio[0].set_value("Analysis").run()
     assert not app.exception
-    assert any("ACTIVE HIGH-SEVERITY FINDING" in item.value for item in app.error)
+    markdown = "\n".join(item.value for item in app.markdown)
+    assert 'class="finding"' in markdown and "RULE-RES-001" in markdown
+    assert "Gravité élevée" in markdown
 
 
 def test_custom_one_to_four_request_reaches_normalized_changeset_and_analysis():
@@ -92,7 +96,7 @@ def test_custom_one_to_four_request_reaches_normalized_changeset_and_analysis():
     assert not app.exception
     assert any("Future Twin and State Diff generated" in item.value for item in app.success)
     app.radio[0].set_value("Analysis").run()
-    assert any("PASS" in item.value for item in app.success)
+    assert any("Aucun risque actif" in item.value for item in app.success)
     markdown = "\n".join(item.value for item in app.markdown)
     assert ">1<" in markdown and ">4<" in markdown
 
@@ -149,23 +153,25 @@ def test_security_scenarios_s03_and_s04_reach_the_analysis_page():
         app = _analysis_for(index)
         assert not app.exception
         assert "confirmation_error" not in app.session_state
-        assert any(rule in item.value for item in app.error)
+        cards = [m.value for m in app.markdown if 'class="finding"' in m.value]
+        assert any(rule in card for card in cards)
 
 
 def test_analysis_page_links_risk_impact_ai_and_verified_fixes():
     app = _analysis_for(3)  # S04 : PostgreSQL ouvert à Internet
     assert not app.exception
     labels = [tab.label for tab in app.tabs]
-    assert labels[-4:] == ["Risque", "Impact et chemin d'attaque", "Analyste IA", "Correctifs vérifiés"]
-    assert any(m.label == "Risk Score" and m.value == "30 / 100" for m in app.metric)
+    assert labels[:5] == ["Risque", "Impact et chemin d'attaque", "Analyste IA", "Correctifs vérifiés", "Simulation"]
+    verdict = next(m.value for m in app.markdown if 'class="verdict"' in m.value)
+    assert '<span class="num">30</span>' in verdict and "Risque <span>moyen</span>" in verdict
     # Analyste IA (texte de secours, sans LLM) : il cite le score des règles, il ne le change pas.
     assert any(m.value.startswith("> Ce changement obtient 30/100") for m in app.markdown)
     # Correctifs rejoués dans le jumeau.
     assert app.dataframe
     assert any("30 → **0/100**" in m.value for m in app.markdown)
     pipeline = "\n".join(m.value for m in app.markdown)
-    assert "AI Explanation — COMPLETE" in pipeline
-    assert "Verified Fixes — COMPLETE" in pipeline
+    assert 'title="AI Explanation : terminée"' in pipeline
+    assert 'title="Verified Fixes : terminée"' in pipeline
 
 
 def test_llm_toggle_waits_for_click_and_falls_back_without_ollama():
