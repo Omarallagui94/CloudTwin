@@ -15,7 +15,7 @@ from kubernetes import client, config
 
 from analysis.engine import run as run_analysis
 from ai_analyst import explain as explain_analysis
-from change_assistant import UnsupportedChangeRequest, parse_change_request
+from gemini import GeminiClient, InterpretationError, interpret_change
 from discovery.aws_collector import AWSCollector
 from discovery.kubernetes_collector import KubernetesCollector
 from discovery.normalizer import normalize
@@ -541,6 +541,7 @@ def set_pending_change(scenario: dict[str, Any], twin: dict[str, Any], origin: s
     st.session_state.pop("affected_resources", None)
     st.session_state.pop("simulation_report", None)
     st.session_state.pop("show_diff_graph", None)
+    st.session_state.pop("gemini_explanation", None)
 
 
 def render_proposal(scenario: dict[str, Any]) -> None:
@@ -554,6 +555,13 @@ def render_proposal(scenario: dict[str, Any]) -> None:
         <b>Proposed:</b> <code>{json.dumps(scenario.get('after'), sort_keys=True)}</code></div>""",
         unsafe_allow_html=True,
     )
+    try:
+        preview = ChangeIngester(st.session_state.pending_twin).ingest_scenario(scenario).to_dict()
+        with st.expander("Structured Change JSON", expanded=True):
+            st.caption("Validated canonical ChangeSet consumed by CloudTwin")
+            st.json(preview)
+    except IngestionError as exc:
+        st.warning(f"The proposed change is not valid for the active Current Twin: {exc}")
 
 
 def future_twin_for(twin: dict[str, Any], changeset: Any) -> dict[str, Any]:
@@ -595,6 +603,24 @@ def confirm_pending_change() -> None:
     st.session_state.confirmed_changeset = changeset.to_dict()
     st.session_state.analysis_result = result.model_dump(mode="json")
     st.session_state.analysis_explanation = explanation
+    gemini = GeminiClient()
+    if gemini.is_available() and st.session_state.get("pending_origin") == "Gemini":
+        try:
+            deterministic = result.model_dump(mode="json")
+            st.session_state.gemini_explanation = gemini.explain_analysis({
+                "original_request": scenario.get("description"),
+                "resolved_target": changeset.changes[0].resource_id,
+                "changeset": changeset.to_dict(),
+                "state_diff": diff_data,
+                "affected_resource_ids": [item.resource_id for item in structural.affected],
+                "triggered_rules": [f["rule_id"] for f in deterministic["findings"] if f["status"] == "fail"],
+                "deterministic_risk": deterministic.get("risk"),
+                "blast_radius": deterministic.get("blast_radius"),
+            }).model_dump(mode="json")
+        except Exception as exc:
+            st.session_state.gemini_explanation_error = (
+                f"Gemini explanation was unavailable ({type(exc).__name__}); deterministic results remain authoritative."
+            )
     # Objets gardés pour l'analyste IA et les correctifs vérifiés (page Analysis).
     st.session_state.analysis_context = context
     st.session_state.analysis_result_obj = result
@@ -827,6 +853,16 @@ def render_simulation_experience(
         render_affected_resources()
         st.markdown("### What changed?")
         st.info(_plain_explanation(changeset, diff, current, future))
+        gemini_explanation = st.session_state.get("gemini_explanation")
+        if gemini_explanation:
+            st.markdown("### Gemini explanation")
+            st.caption("Narrative only — CloudTwin's deterministic score and severity remain authoritative.")
+            st.write(gemini_explanation["summary"])
+            st.write(gemini_explanation["impact"])
+            for action in gemini_explanation.get("recommended_actions", []):
+                st.markdown(f"- {action}")
+        elif st.session_state.get("gemini_explanation_error"):
+            st.info(st.session_state.gemini_explanation_error)
     with tabs[1]:
         st.markdown("### Focused Diff View")
         st.caption("Only changed resources, real direct neighbors, and actual relationships are shown.")
@@ -881,20 +917,27 @@ def render_change_assistant(mode: str, region: str, cluster_name: str) -> None:
         st.caption("Examples: “Scale the UI deployment from 1 to 4 replicas” or “Reduce UI replicas from 3 to 1”.")
         request = st.chat_input("Describe a proposed infrastructure change")
         if request:
-            try:
-                parsed = parse_change_request(request)
-                twin = current_twin_for(parsed.scenario, mode)
-                if not twin:
-                    raise UnsupportedChangeRequest("The request was parsed, but its target/current value is not present in the active Current Twin.")
-                set_pending_change(parsed.scenario, twin, "Custom request")
-            except UnsupportedChangeRequest as exc:
-                st.session_state.parse_error = str(exc)
+            twin = st.session_state.get("twin")
+            if not twin:
+                st.session_state.parse_error = "No active Current Twin is available for target resolution."
+            else:
+                try:
+                    with st.status("Gemini is interpreting the requested change...", expanded=False):
+                        parsed = interpret_change(request, twin)
+                    set_pending_change(parsed.scenario, twin, "Gemini" if parsed.used_gemini else "Deterministic fallback")
+                    st.session_state.interpretation_provider = parsed.provider
+                    st.session_state.gemini_parse_diagnostic = parsed.gemini_diagnostic
+                except InterpretationError as exc:
+                    st.session_state.parse_error = str(exc)
     if "parse_error" in st.session_state:
         st.warning(st.session_state.pop("parse_error"))
     if "confirmation_error" in st.session_state:
         st.warning(st.session_state.confirmation_error)
     scenario = st.session_state.get("pending_scenario")
     if scenario:
+        st.caption(f"Interpretation provider: {st.session_state.get('interpretation_provider', 'Predefined scenario')}")
+        if st.session_state.get("gemini_parse_diagnostic"):
+            st.info(st.session_state.gemini_parse_diagnostic)
         render_proposal(scenario)
         confirm, cancel = st.columns(2)
         with confirm:
@@ -906,6 +949,8 @@ def render_change_assistant(mode: str, region: str, cluster_name: str) -> None:
                     "pending_scenario", "pending_twin", "pending_origin", "confirmed_changeset",
                     "analysis_result", "analysis_explanation", "future_twin", "state_diff", "affected_resources",
                     "simulation_report", "show_diff_graph",
+                    "gemini_explanation", "gemini_explanation_error", "interpretation_provider",
+                    "gemini_parse_diagnostic",
                 ):
                     st.session_state.pop(key, None)
                 st.rerun()

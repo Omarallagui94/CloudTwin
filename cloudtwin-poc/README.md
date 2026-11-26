@@ -4,6 +4,50 @@ This proof of concept performs read-only discovery of the AWS account in `eu-wes
 
 It does not run Terraform, apply Kubernetes manifests, or change cloud resources. The proposed scenario is data only and is not executed.
 
+## Gemini Change Assistant
+
+The **Describe custom change** flow can use the Gemini Developer API as a
+natural-language adapter. Gemini produces a validated proposed intent; CloudTwin
+then resolves the target and all current values from the active Current Twin and
+converts the proposal through the existing canonical `ChangeSet` ingestion path.
+Simulation, State Diff, affected resources, deterministic rules, blast radius,
+severity, and risk score remain authoritative CloudTwin calculations. Gemini may
+explain those results, but cannot replace or modify them.
+
+Configuration is read only from the process environment:
+
+```text
+GEMINI_API_KEY=               # required to enable Gemini; no default
+GEMINI_MODEL=gemini-2.5-flash # optional
+GEMINI_TIMEOUT_SECONDS=15     # optional
+```
+
+Copy `.env.example` only as a local reference; never commit a populated `.env`
+or bake the key into a container image. The repository ignores `.env` files. If
+Gemini is missing or fails, supported requests fall back to the existing local
+deterministic parser and the UI reports that fallback. Ambiguous requests are
+rejected without simulation.
+
+Gemini receives only sanitized resource identifiers, types, names, namespaces,
+and the minimum deterministic analysis facts needed for explanation. It never
+receives credentials, Kubernetes Secret contents, or permission to call AWS,
+Kubernetes, Terraform, or deployment APIs. CloudTwin remains simulation-only.
+
+Local manual test (PowerShell):
+
+```powershell
+$env:GEMINI_API_KEY="<set-locally-by-user>"
+$env:GEMINI_MODEL="gemini-2.5-flash"
+$env:GEMINI_TIMEOUT_SECONDS="15"
+python -m streamlit run app.py
+```
+
+Open **Change Assistant**, select **Describe custom change**, enter `Expose the
+ui service publicly`, inspect the interpretation and **Structured Change JSON**,
+then click **Confirm for Analysis**. Verify the Future Twin, State Diff,
+deterministic findings/risk, and Gemini explanation. No real infrastructure is
+changed.
+
 ## Discovered resources
 
 AWS discovery includes VPCs, subnets, security groups, EC2 instances, EKS clusters and managed node groups, Elastic Load Balancers (v2 and classic), and IAM roles.
