@@ -11,9 +11,7 @@ import boto3
 import streamlit as st
 import streamlit.components.v1 as components
 from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ClientError
 from kubernetes import client, config
-from kubernetes.client.exceptions import ApiException
 
 from analysis.engine import run as run_analysis
 from ai_analyst import explain as explain_analysis
@@ -29,7 +27,6 @@ from simulation import (
     SimulationError, analyze_affected_resources, build_future_twin, calculate_state_diff,
     simulate_future_twin,
 )
-from analysis.models import AnalysisContext
 from ai_analyst.fixes import remediate_with_ai
 from visualization.simulation_view import (
     ATTACK_EDGE, HIGHLIGHT, impact_graph_html, llm_client, render_ai, render_fixes,
@@ -42,6 +39,8 @@ from visualization.build_graph import (
 
 ROOT = Path(__file__).resolve().parent
 STATE_PATH = ROOT / "outputs" / "current_state.json"
+REFERENCE_TWIN_PATH = ROOT / "fixtures" / "sample_current_state.json"
+INFRA_GRAPH_PATH = ROOT / "outputs" / "infrastructure.html"
 GRAPH_PATH = ROOT / "outputs" / "current_twin.html"
 DIFF_GRAPH_PATH = ROOT / "outputs" / "diff_twin.html"
 CURRENT_COMPARE_PATH = ROOT / "outputs" / "simulation_current.html"
@@ -155,19 +154,19 @@ def test_connections(region: str, cluster_name: str) -> dict[str, dict[str, Any]
     try:
         session.client("sts", config=sdk).get_caller_identity()
         result["aws"] = {"ok": True, "detail": "Read-only session available"}
-    except (ClientError, BotoCoreError):
-        result["aws"] = {"ok": False, "detail": "Credentials unavailable or session rejected"}
+    except Exception as exc:  # toute erreur du SDK (identifiants, réseau, réponse illisible) : expliquée, jamais levée
+        result["aws"] = {"ok": False, "detail": explain_discovery_error(exc)[0]}
     try:
         cluster = session.client("eks", config=sdk).describe_cluster(name=cluster_name)["cluster"]
         result["eks"] = {"ok": True, "detail": f"Cluster status: {cluster['status']}"}
-    except (ClientError, BotoCoreError):
-        result["eks"] = {"ok": False, "detail": "Cluster unavailable"}
+    except Exception as exc:  # idem pour EKS
+        result["eks"] = {"ok": False, "detail": explain_discovery_error(exc)[0]}
     try:
         config.load_kube_config()
         version = client.VersionApi().get_code()
         result["kubernetes"] = {"ok": True, "detail": f"API {version.git_version}"}
-    except (ApiException, OSError, ValueError, config.ConfigException):
-        result["kubernetes"] = {"ok": False, "detail": "Kubeconfig or API unavailable"}
+    except Exception as exc:  # idem pour Kubernetes (kubeconfig absent, API injoignable)
+        result["kubernetes"] = {"ok": False, "detail": explain_discovery_error(exc)[0]}
     return result
 
 
@@ -313,41 +312,128 @@ def render_connection_status(results: dict[str, dict[str, Any]]) -> None:
             st.caption(item["detail"])
 
 
+def explain_discovery_error(exc: BaseException) -> tuple[str, str]:
+    """(cause lisible, action à faire) pour une découverte Live qui échoue. Jamais de secret affiché."""
+    name, text = type(exc).__name__, str(exc)
+    lowered = text.lower()
+    if name in {"NoCredentialsError", "PartialCredentialsError"} or "unable to locate credentials" in lowered:
+        return ("Aucun identifiant AWS n'est configuré sur cette machine.",
+                "Configure le compte de lecture du collecteur : `aws configure` (ou la variable AWS_PROFILE).")
+    if "expiredtoken" in lowered or ("expired" in lowered and "token" in lowered):
+        return ("Les identifiants AWS ont expiré.", "Renouvelle la session : `aws sso login` ou de nouvelles clés.")
+    if "accessdenied" in lowered or "not authorized" in lowered or "unauthorizedoperation" in lowered:
+        return ("Le compte AWS n'a pas les droits de lecture nécessaires.",
+                "Applique la politique du collecteur décrite dans docs/lab-security.md.")
+    if "resourcenotfound" in lowered or "no cluster found" in lowered:
+        return ("Le cluster EKS demandé n'existe pas dans cette région.",
+                "Vérifie le nom et la région dans la barre latérale, ou recrée le labo (terraform apply).")
+    if name == "ConfigException" or "kube-config" in lowered or "kubeconfig" in lowered or "invalid kube" in lowered:
+        return ("Kubernetes n'est pas configuré : aucun kubeconfig utilisable.",
+                "Relie kubectl au cluster : `aws eks update-kubeconfig --name <cluster> --region <région>`.")
+    if name in {"EndpointConnectionError", "ConnectTimeoutError", "ConnectionError", "MaxRetryError"} \
+            or name == "ResponseParserError" or "request blocked" in lowered \
+            or "could not connect" in lowered or "timed out" in lowered or "name resolution" in lowered:
+        return ("AWS ou le cluster ne répond pas (réseau, ou labo détruit).",
+                "Vérifie la connexion, puis que le labo tourne. Le labo est détruit entre les sessions pour éviter les coûts.")
+    return (f"{name} : {text[:300]}", "Clique sur « Test read-only connections » pour voir quel service bloque.")
+
+
+def infrastructure_to_show(mode: str) -> tuple[dict[str, Any] | None, str]:
+    """L'infrastructure à afficher, même si la découverte Live échoue : la plus récente disponible."""
+    twin = st.session_state.get("twin")
+    if mode == "Live AWS Mode":
+        if twin and st.session_state.get("twin_source") == "Live read-only discovery":
+            return twin, "Découverte Live de cette session"
+        saved = load_json(STATE_PATH)
+        if saved and saved.get("resources"):
+            from datetime import datetime
+            when = datetime.fromtimestamp(STATE_PATH.stat().st_mtime).strftime("%d/%m/%Y à %H:%M")
+            return saved, f"Dernière découverte Live enregistrée ({when})"
+        reference = load_json(REFERENCE_TWIN_PATH)
+        return reference, "Infrastructure de référence du labo (fixture anonymisée, aucune découverte Live enregistrée)"
+    return twin, st.session_state.get("twin_source", "Fixture locale")
+
+
+def render_infrastructure_view(twin: dict[str, Any], source: str) -> None:
+    """Inventaire et graphe de l'infrastructure, indépendants de tout changement proposé."""
+    st.markdown("### Infrastructure actuelle")
+    st.caption(f"Source : {source}. Affichage en lecture seule, aucun changement n'est simulé ici.")
+    render_metrics(twin)
+    resources = twin.get("resources", [])
+    counts: dict[tuple[str, str], int] = {}
+    for resource in resources:
+        key = ("AWS" if resource.get("provider") == "aws" else "Kubernetes" if resource.get("provider") == "kubernetes"
+               else str(resource.get("provider", "—")).title(), resource.get("type", "?").replace("_", " ").title())
+        counts[key] = counts.get(key, 0) + 1
+    left, right = st.columns([2, 3])
+    with left:
+        st.markdown("#### Inventaire")
+        st.dataframe(
+            [{"Fournisseur": p, "Type": t, "Nombre": n} for (p, t), n in sorted(counts.items())],
+            hide_index=True, use_container_width=True, height=min(38 + 35 * len(counts), 520),
+        )
+    with right:
+        st.markdown("#### Graphe")
+        view = st.selectbox("Vue", GRAPH_VIEWS, index=GRAPH_VIEWS.index("Full Infrastructure"), key="infra-view")
+        projection = project_twin(twin, view)
+        if not projection["resources"]:
+            st.info("Aucune ressource dans cette vue.")
+            return
+        build_graph(projection, INFRA_GRAPH_PATH, view=view)
+        components.html(INFRA_GRAPH_PATH.read_text(encoding="utf-8"), height=560, scrolling=True)
+
+
 def render_infrastructure(mode: str, region: str, cluster_name: str) -> None:
-    st.title("Infrastructure")
-    st.caption("Connect to live read-only discovery or run the complete demonstration with sanitized fixtures.")
+    st.markdown(ui.page_head(
+        "Infrastructure",
+        "L'infrastructure AWS et Kubernetes connue de CloudTwin : fixtures anonymisées, "
+        "ou découverte Live en lecture seule.",
+    ), unsafe_allow_html=True)
     if mode == "Local Fixture Mode":
-        st.info("Running using sanitized Local Fixture Mode — no AWS calls are made.")
+        st.info("Mode fixtures locales : aucun appel AWS n'est fait.")
         available = scenarios()
-        fixture_id = st.selectbox("Fixture Current Twin", list(available), format_func=lambda sid: f"{sid} — {available[sid]['name']}")
-        twin = fixture_for_scenario(fixture_id)
-        if twin:
-            st.session_state.twin = twin
-            st.session_state.twin_source = f"Local fixture {fixture_id}"
-            render_metrics(twin)
-            st.success("Current Twin loaded successfully from sanitized fixture data.")
-        else:
-            st.error("The selected fixture Current Twin is unavailable.")
+        options = ["REF", *available]
+        labels = {"REF": "Infrastructure de référence du labo (40 ressources)",
+                  **{sid: f"{sid} — {available[sid]['name']}" for sid in available}}
+        fixture_id = st.selectbox("Jumeau à afficher", options, format_func=labels.get, key="infra-fixture")
+        twin = load_json(REFERENCE_TWIN_PATH) if fixture_id == "REF" else fixture_for_scenario(fixture_id)
+        if not twin:
+            st.error("Cette fixture est introuvable dans le dépôt.")
+            return
+        st.session_state.twin = twin
+        st.session_state.twin_source = labels[fixture_id]
+        render_infrastructure_view(twin, labels[fixture_id])
         return
-    st.warning("Live AWS Mode performs read-only API discovery. It never applies Terraform or Kubernetes changes.")
-    if st.button("Test read-only connections", use_container_width=True):
-        with st.spinner("Checking AWS, EKS, and Kubernetes access…"):
-            st.session_state.connection_results = test_connections(region, cluster_name)
+
+    st.warning("Le mode Live interroge AWS et Kubernetes en lecture seule. Il n'applique jamais de changement.")
+    columns = st.columns(2)
+    with columns[0]:
+        if st.button("Test read-only connections", use_container_width=True):
+            with st.spinner("Vérification de l'accès à AWS, EKS et Kubernetes…"):
+                st.session_state.connection_results = test_connections(region, cluster_name)
+    with columns[1]:
+        run = st.button("Run Discovery", type="primary", use_container_width=True)
     if "connection_results" in st.session_state:
         render_connection_status(st.session_state.connection_results)
-    if st.button("Run Discovery", type="primary", use_container_width=True):
+    if run:
         try:
             twin, warnings = run_discovery(region, cluster_name)
             st.session_state.twin = twin
             st.session_state.twin_source = "Live read-only discovery"
-            st.success("Current Twin generated successfully")
+            st.session_state.pop("discovery_error", None)
+            st.success("Current Twin généré par la découverte Live.")
             for warning in warnings:
                 st.warning(warning)
-        except Exception:
-            st.error("Discovery could not complete. No infrastructure changes were made.")
-    twin = st.session_state.get("twin")
-    if twin and st.session_state.get("twin_source") == "Live read-only discovery":
-        render_metrics(twin)
+        except Exception as exc:  # collecteurs AWS/Kubernetes : toute erreur est expliquée, rien n'est modifié
+            st.session_state.discovery_error = explain_discovery_error(exc)
+    if st.session_state.get("discovery_error"):
+        cause, action = st.session_state.discovery_error
+        st.error(f"La découverte Live n'a pas abouti. Aucun changement n'a été fait.\n\n**Cause :** {cause}\n\n**À faire :** {action}")
+    twin, source = infrastructure_to_show(mode)
+    if twin:
+        render_infrastructure_view(twin, source)
+    else:
+        st.info("Aucune infrastructure à afficher : lance une découverte Live.")
 
 
 def render_current_twin(mode: str) -> None:

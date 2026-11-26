@@ -270,7 +270,9 @@ def render_llm_settings() -> None:
         st.text_input("Adresse Ollama", value="http://localhost:11434", key="llm_url")
         st.number_input("Délai max par appel (s)", min_value=5, max_value=300, value=30, step=5,
                         key="llm_timeout", help="llama3.1 répond en ~15 s sur un MacBook.")
-    st.caption("Désactivé : explication et correctifs du catalogue, sans IA.")
+    st.caption("Activé : l'explication et des correctifs sont demandés au LLM local, puis vérifiés par les règles."
+               if st.session_state.get("llm_enabled")
+               else "Désactivé : explication et correctifs du catalogue, sans IA.")
 
 
 def render_simulation(scenario_id: str, scenario_dir: Path) -> None:
