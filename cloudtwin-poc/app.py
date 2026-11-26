@@ -1113,19 +1113,48 @@ def render_analysis(mode: str, region: str, cluster_name: str) -> None:
     )
 
 
+NAV_ICONS = {
+    "Overview": ":material/space_dashboard:",
+    "Infrastructure": ":material/lan:",
+    "Current Twin": ":material/account_tree:",
+    "Change Assistant": ":material/edit_note:",
+    "Analysis": ":material/radar:",
+}
+
+
+def render_sidebar() -> tuple[str, str, str, str]:
+    """Navigation, source des données, analyste IA ; renvoie (page, mode, région, cluster)."""
+    st.markdown(ui.brand(), unsafe_allow_html=True)
+    page = st.radio("Navigation", PAGES, key="nav", label_visibility="collapsed",
+                    format_func=lambda name: f"{NAV_ICONS.get(name, '')} {name}")
+    result = st.session_state.get("analysis_result")
+    scenario = st.session_state.get("pending_scenario") or {}
+    if result and st.session_state.get("confirmed_changeset"):
+        st.markdown(ui.side_last_run(scenario.get("scenario_id") or "Custom", scenario.get("name", ""),
+                                     int((result.get("risk") or {}).get("score", 0))), unsafe_allow_html=True)
+
+    st.markdown(ui.side_title("Source des données"), unsafe_allow_html=True)
+    mode = st.radio("Data source", ["Local Fixture Mode", "Live AWS Mode"], key="data_source",
+                    label_visibility="collapsed",
+                    format_func=lambda m: "Fixtures" if m == "Local Fixture Mode" else "AWS live")
+    region, cluster_name = "eu-west-3", "retail-store"
+    if mode == "Live AWS Mode":
+        region = st.text_input("AWS Region", region)
+        cluster_name = st.text_input("EKS Cluster", cluster_name)
+        st.markdown(ui.side_status("Lecture seule sur AWS : découverte, jamais de modification.", "live"),
+                    unsafe_allow_html=True)
+    else:
+        st.markdown(ui.side_status("Jumeaux de démonstration : aucun appel AWS.", "ok"), unsafe_allow_html=True)
+
+    render_llm_settings()
+    st.markdown(ui.side_footer(), unsafe_allow_html=True)
+    return page, mode, region, cluster_name
+
+
 def main() -> None:
     configure_page()
     with st.sidebar:
-        st.markdown(ui.brand(), unsafe_allow_html=True)
-        page = st.radio("Navigation", PAGES, label_visibility="collapsed")
-        st.divider()
-        mode = st.radio("Data source", ["Local Fixture Mode", "Live AWS Mode"])
-        region = st.text_input("AWS Region", "eu-west-3", disabled=mode == "Local Fixture Mode")
-        cluster_name = st.text_input("EKS Cluster", "retail-store", disabled=mode == "Local Fixture Mode")
-        st.divider()
-        render_llm_settings()
-        st.divider()
-        st.caption("Read-only simulation. No apply, deploy, or delete actions.")
+        page, mode, region, cluster_name = render_sidebar()
     if mode == "Local Fixture Mode" and "twin" not in st.session_state:
         st.session_state.twin = fixture_for_scenario("S01")
         st.session_state.twin_source = "Local fixture S01"

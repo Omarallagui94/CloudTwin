@@ -24,9 +24,11 @@ def markdown_text(app: AppTest) -> str:
 
 def test_authoritative_frontend_is_the_five_page_dashboard():
     app = AppTest.from_file(APP, default_timeout=30).run()
-    assert app.radio[0].options == [
+    # Chaque entrée de navigation porte une icône Material devant le nom de la page.
+    assert [option.split(": ", 1)[-1] for option in app.radio[0].options] == [
         "Overview", "Infrastructure", "Current Twin", "Change Assistant", "Analysis"
     ]
+    assert all(option.startswith(":material/") for option in app.radio[0].options)
     assert app.radio[0].value == "Overview"
 
 
