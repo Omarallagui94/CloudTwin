@@ -1,4 +1,3 @@
-
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cloudtwin.dev/schema/v1/impact.schema.json",
@@ -18,10 +17,26 @@
           "impact_type": {
             "enum": ["DIRECT", "INDIRECT", "RISK"]
           },
-          "reason": { "type": "string", "minLength": 1 }
+          "reason": { "type": "string", "minLength": 1 },
+          "distance": { "type": "integer", "minimum": 0 },
+          "path": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "source_change": { "type": "string" }
         },
         "additionalProperties": false
       }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "total_affected": { "type": "integer", "minimum": 0 },
+        "direct": { "type": "integer", "minimum": 0 },
+        "indirect": { "type": "integer", "minimum": 0 },
+        "risk": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": false

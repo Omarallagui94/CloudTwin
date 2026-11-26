@@ -1,0 +1,436 @@
+{
+  "schema_version": "1.0.0",
+  "scenario_id": "scenario-01",
+  "impacts": [
+    {
+      "resource_id": "k8s:deployment:default:ui",
+      "impact_type": "DIRECT",
+      "reason": "Direct mutation target (MODIFIED on properties.replicas)",
+      "distance": 0,
+      "path": [
+        "k8s:deployment:default:ui"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:namespace:default",
+      "impact_type": "DIRECT",
+      "reason": "Direct impact from k8s:deployment:default:ui (MODIFIED): k8s:namespace:default --[CONTAINS]--> k8s:deployment:default:ui (enclosing parent container/namespace/VPC)",
+      "distance": 1,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:pod:default:ui-6d4c8f7b9-abcde",
+      "impact_type": "DIRECT",
+      "reason": "Direct impact from k8s:deployment:default:ui (MODIFIED): k8s:deployment:default:ui --[SELECTS]--> k8s:pod:default:ui-6d4c8f7b9-abcde (selects and manages pods of)",
+      "distance": 1,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:pod:default:ui-6d4c8f7b9-abcde"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service-account:default:ui",
+      "impact_type": "DIRECT",
+      "reason": "Direct impact from k8s:deployment:default:ui (MODIFIED): k8s:deployment:default:ui --[USES]--> k8s:service-account:default:ui (uses/depends on configuration or identity)",
+      "distance": 1,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:service-account:default:ui"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service:default:ui",
+      "impact_type": "DIRECT",
+      "reason": "Direct impact from k8s:deployment:default:ui (MODIFIED): k8s:service:default:ui --[EXPOSES]--> k8s:deployment:default:ui (service exposing target workload)",
+      "distance": 1,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:service:default:ui"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:eks:retail-store",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> aws:eks:retail-store [last hop: CONTAINS incoming]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "aws:eks:retail-store"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:service:default:ui -> aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001 [last hop: ROUTES_TO incoming]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:service:default:ui",
+        "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:deployment:default:cart",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:deployment:default:cart [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:deployment:default:cart"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:deployment:default:catalog",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:deployment:default:catalog [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:deployment:default:catalog"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:deployment:default:checkout",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:deployment:default:checkout [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:deployment:default:checkout"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:deployment:default:orders",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:deployment:default:orders [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:deployment:default:orders"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:node:ip-10-0-10-51.eu-west-3.compute.internal",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:pod:default:ui-6d4c8f7b9-abcde -> k8s:node:ip-10-0-10-51.eu-west-3.compute.internal [last hop: RUNS_ON outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:pod:default:ui-6d4c8f7b9-abcde",
+        "k8s:node:ip-10-0-10-51.eu-west-3.compute.internal"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:pod:default:cart-7a2b3c4d5-klmno",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:pod:default:cart-7a2b3c4d5-klmno [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:pod:default:cart-7a2b3c4d5-klmno"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:pod:default:catalog-5f8d9a6c7-fghij",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:pod:default:catalog-5f8d9a6c7-fghij [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:pod:default:catalog-5f8d9a6c7-fghij"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:pod:default:checkout-1a2b3c4d5-uvwxy",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:pod:default:checkout-1a2b3c4d5-uvwxy [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:pod:default:checkout-1a2b3c4d5-uvwxy"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:pod:default:orders-9e8f7g6h5-pqrst",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:pod:default:orders-9e8f7g6h5-pqrst [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:pod:default:orders-9e8f7g6h5-pqrst"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service-account:default:cart",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:service-account:default:cart [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:service-account:default:cart"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service-account:default:catalog",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:service-account:default:catalog [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:service-account:default:catalog"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service-account:default:checkout",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:service-account:default:checkout [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:service-account:default:checkout"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service-account:default:default",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:service-account:default:default [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:service-account:default:default"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service-account:default:orders",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:service-account:default:orders [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:service-account:default:orders"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service:default:cart",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:service:default:cart [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:service:default:cart"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service:default:catalog",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:service:default:catalog [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:service:default:catalog"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service:default:checkout",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:service:default:checkout [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:service:default:checkout"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:service:default:orders",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 2) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> k8s:service:default:orders [last hop: CONTAINS outgoing]",
+      "distance": 2,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "k8s:service:default:orders"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:ec2:i-0aaa1111dddd0001a",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:pod:default:ui-6d4c8f7b9-abcde -> k8s:node:ip-10-0-10-51.eu-west-3.compute.internal -> aws:ec2:i-0aaa1111dddd0001a [last hop: RUNS_ON outgoing]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:pod:default:ui-6d4c8f7b9-abcde",
+        "k8s:node:ip-10-0-10-51.eu-west-3.compute.internal",
+        "aws:ec2:i-0aaa1111dddd0001a"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:eks-nodegroup:retail-store:retail-store-nodes",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> aws:eks:retail-store -> aws:eks-nodegroup:retail-store:retail-store-nodes [last hop: CONTAINS outgoing]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "aws:eks:retail-store",
+        "aws:eks-nodegroup:retail-store:retail-store-nodes"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:iam-role:arn:aws:iam::000000000000:role/retail-store-cluster-role",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> aws:eks:retail-store -> aws:iam-role:arn:aws:iam::000000000000:role/retail-store-cluster-role [last hop: USES outgoing]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "aws:eks:retail-store",
+        "aws:iam-role:arn:aws:iam::000000000000:role/retail-store-cluster-role"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:internet",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:service:default:ui -> aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001 -> aws:internet [last hop: EXPOSES incoming]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:service:default:ui",
+        "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001",
+        "aws:internet"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:security-group:sg-0aaa1111cccc0001a",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> aws:eks:retail-store -> aws:security-group:sg-0aaa1111cccc0001a [last hop: USES outgoing]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "aws:eks:retail-store",
+        "aws:security-group:sg-0aaa1111cccc0001a"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:subnet:subnet-0aaa1111aaaa0001a",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:service:default:ui -> aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001 -> aws:subnet:subnet-0aaa1111aaaa0001a [last hop: LOCATED_IN outgoing]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:service:default:ui",
+        "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001",
+        "aws:subnet:subnet-0aaa1111aaaa0001a"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:subnet:subnet-0aaa1111aaaa0002b",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:service:default:ui -> aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001 -> aws:subnet:subnet-0aaa1111aaaa0002b [last hop: LOCATED_IN outgoing]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:service:default:ui",
+        "aws:load-balancer:arn:aws:elasticloadbalancing:eu-west-3:000000000000:loadbalancer/net/retail-store-nlb/0000000000000001",
+        "aws:subnet:subnet-0aaa1111aaaa0002b"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "aws:vpc:vpc-0aaa1111bbbb2222c",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> aws:eks:retail-store -> aws:vpc:vpc-0aaa1111bbbb2222c [last hop: LOCATED_IN outgoing]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "aws:eks:retail-store",
+        "aws:vpc:vpc-0aaa1111bbbb2222c"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:namespace:kube-system",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> aws:eks:retail-store -> k8s:namespace:kube-system [last hop: CONTAINS outgoing]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "aws:eks:retail-store",
+        "k8s:namespace:kube-system"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    },
+    {
+      "resource_id": "k8s:node:ip-10-0-11-52.eu-west-3.compute.internal",
+      "impact_type": "INDIRECT",
+      "reason": "Transitive impact (distance 3) from k8s:deployment:default:ui (MODIFIED) via path: k8s:deployment:default:ui -> k8s:namespace:default -> aws:eks:retail-store -> k8s:node:ip-10-0-11-52.eu-west-3.compute.internal [last hop: CONTAINS outgoing]",
+      "distance": 3,
+      "path": [
+        "k8s:deployment:default:ui",
+        "k8s:namespace:default",
+        "aws:eks:retail-store",
+        "k8s:node:ip-10-0-11-52.eu-west-3.compute.internal"
+      ],
+      "source_change": "k8s:deployment:default:ui"
+    }
+  ],
+  "summary": {
+    "total_affected": 35,
+    "direct": 5,
+    "indirect": 30,
+    "risk": 0
+  }
+}

@@ -6,7 +6,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 from ingestion.models import (
     ChangeSet,
@@ -233,9 +236,24 @@ class KubernetesManifestIngester:
         else:
             raise InvalidChangeInputError(f"Unsupported manifest input type: {type(manifest)}")
 
+        # Try JSON first
+        content_trimmed = content.strip()
+        if content_trimmed.startswith("{"):
+            try:
+                parsed = json.loads(content_trimmed)
+                return [parsed] if isinstance(parsed, dict) else [d for d in parsed if isinstance(d, dict)]
+            except json.JSONDecodeError:
+                pass
+
+        if yaml is None:
+            raise InvalidChangeInputError(
+                "PyYAML is not installed. To parse YAML manifests, install it with: pip install pyyaml"
+            )
+
         # Try YAML (supports multi-doc and JSON)
         try:
             docs = list(yaml.safe_load_all(content))
             return [d for d in docs if isinstance(d, dict)]
         except yaml.YAMLError as exc:
             raise InvalidChangeInputError(f"Failed to parse Kubernetes manifest: {exc}") from exc
+

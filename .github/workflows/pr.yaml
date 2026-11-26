@@ -1,9 +1,13 @@
 name: "PR"
 
-# Legacy upstream workflow retained for manual diagnostics only. Its required
-# pull-request checks now run in cloudtwin-ci.yml.
 on:
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - edited
+      - synchronize
 
 permissions:
   pull-requests: read

@@ -9,12 +9,6 @@ variable "cluster_version" {
   default     = "1.31"
 }
 
-variable "cloudtwin_collector_role_arn" {
-  description = "Optional collector role ARN to map into the cluster through aws-auth"
-  type        = string
-  default     = null
-}
-
 variable "tags" {
   description = "List of tags to be associated with resources."
   default     = {}

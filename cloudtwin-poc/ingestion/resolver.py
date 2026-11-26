@@ -53,9 +53,6 @@ AWS_TYPES = frozenset({
     "IAM_ROLE",
 })
 
-# Kubernetes kinds without a namespace: their canonical ID is k8s:<slug>:<name>.
-CLUSTER_SCOPED_TYPES = ("NAMESPACE", "NODE", "CLUSTER_ROLE", "CLUSTER_ROLE_BINDING")
-
 # Mapping from common aliases / Terraform types / K8s kinds to canonical type & slug
 TYPE_NORMALIZATION: dict[str, tuple[str, str, str]] = {
     # format: key.lower() -> (standard_type, provider, slug)
@@ -70,10 +67,9 @@ TYPE_NORMALIZATION: dict[str, tuple[str, str, str]] = {
     "nodes": ("NODE", "kubernetes", "node"),
     "namespace": ("NAMESPACE", "kubernetes", "namespace"),
     "namespaces": ("NAMESPACE", "kubernetes", "namespace"),
-    # Canonical CloudTwin IDs use the Kubernetes API kind without punctuation.
-    "statefulset": ("STATEFUL_SET", "kubernetes", "statefulset"),
-    "statefulsets": ("STATEFUL_SET", "kubernetes", "statefulset"),
-    "stateful_set": ("STATEFUL_SET", "kubernetes", "statefulset"),
+    "statefulset": ("STATEFUL_SET", "kubernetes", "stateful-set"),
+    "statefulsets": ("STATEFUL_SET", "kubernetes", "stateful-set"),
+    "stateful_set": ("STATEFUL_SET", "kubernetes", "stateful-set"),
     "serviceaccount": ("SERVICE_ACCOUNT", "kubernetes", "service-account"),
     "serviceaccounts": ("SERVICE_ACCOUNT", "kubernetes", "service-account"),
     "service_account": ("SERVICE_ACCOUNT", "kubernetes", "service-account"),
@@ -82,12 +78,6 @@ TYPE_NORMALIZATION: dict[str, tuple[str, str, str]] = {
     "networkpolicy": ("NETWORK_POLICY", "kubernetes", "network-policy"),
     "networkpolicies": ("NETWORK_POLICY", "kubernetes", "network-policy"),
     "network_policy": ("NETWORK_POLICY", "kubernetes", "network-policy"),
-    "clusterrole": ("CLUSTER_ROLE", "kubernetes", "cluster-role"),
-    "clusterroles": ("CLUSTER_ROLE", "kubernetes", "cluster-role"),
-    "cluster_role": ("CLUSTER_ROLE", "kubernetes", "cluster-role"),
-    "clusterrolebinding": ("CLUSTER_ROLE_BINDING", "kubernetes", "cluster-role-binding"),
-    "clusterrolebindings": ("CLUSTER_ROLE_BINDING", "kubernetes", "cluster-role-binding"),
-    "cluster_role_binding": ("CLUSTER_ROLE_BINDING", "kubernetes", "cluster-role-binding"),
     # AWS & Terraform AWS
     "vpc": ("VPC", "aws", "vpc"),
     "aws_vpc": ("VPC", "aws", "vpc"),
@@ -241,6 +231,12 @@ class CanonicalResourceResolver:
                 res = self.resources_by_id[r_id]
                 return r_id, res["type"], res["provider"], None
 
+            # Fallback: check if any AWS resource contains resource_name as substring or suffix
+            for r_id, res in self.resources_by_id.items():
+                if res["provider"] == "aws" and res["type"] == canonical_type:
+                    if resource_name in r_id or res["name"] == resource_name:
+                        return r_id, canonical_type, provider, None
+
             raise UnresolvedTargetError(
                 f"Cannot resolve AWS resource '{resource_name}' (type: {canonical_type}) in Current Twin."
             )
@@ -326,7 +322,7 @@ class CanonicalResourceResolver:
         if allow_synthesize:
             canonical_id = (
                 f"k8s:{slug}:{name}"
-                if canonical_type in CLUSTER_SCOPED_TYPES
+                if canonical_type in ("NAMESPACE", "NODE")
                 else f"k8s:{slug}:{ns}:{name}"
             )
             return canonical_id, canonical_type, provider, ns

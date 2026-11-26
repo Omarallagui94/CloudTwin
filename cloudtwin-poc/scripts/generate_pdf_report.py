@@ -161,12 +161,12 @@ HTML_CONTENT = """<!DOCTYPE html>
 
   <div class="header-banner">
     <h1>CloudTwin AI &mdash; Engineering Report</h1>
-    <div class="subtitle">Implementation &amp; Verification of Task H3 (Neo4j Persistence) and Task H4 (Proposed-Change Ingestion)</div>
+    <div class="subtitle">Implementation &amp; Verification of Task H3 (Neo4j Persistence), Task H4 (Proposed-Change Ingestion), and Task H5 (Future Twin Generation)</div>
     <div class="header-meta">
       <span><strong>Date:</strong> October 29, 2026</span>
       <span><strong>Author:</strong> CloudTwin Engineering Team</span>
       <span><strong>Target Milestone:</strong> Local Vertical Slice</span>
-      <span><strong>Test Status:</strong> <span class="badge badge-pass">48 / 48 Tests Passed (100%)</span></span>
+      <span><strong>Test Status:</strong> <span class="badge badge-pass">56 / 56 Tests Passed (100%)</span></span>
     </div>
   </div>
 
@@ -385,14 +385,40 @@ HTML_CONTENT = """<!DOCTYPE html>
         <td><span class="badge badge-pass">PASS</span></td>
         <td><code>test_saved_scenario_01_parses_deterministically</code>, <code>test_saved_terraform_plan...</code>, &amp; <code>test_saved_k8s_manifest...</code></td>
       </tr>
+      <tr>
+        <td rowspan="5"><strong>H5</strong></td>
+        <td>Current Twin remains immutable</td>
+        <td><span class="badge badge-pass">PASS</span></td>
+        <td><code>H5FutureTwinGenerationTests.test_current_twin_remains_immutable</code> (deep copy protection)</td>
+      </tr>
+      <tr>
+        <td>Create, update, delete, and replace operations supported</td>
+        <td><span class="badge badge-pass">PASS</span></td>
+        <td><code>test_create_operation...</code>, <code>test_delete_operation...</code>, <code>test_replace_operation...</code></td>
+      </tr>
+      <tr>
+        <td>Replica scenario changes only intended deployment property</td>
+        <td><span class="badge badge-pass">PASS</span></td>
+        <td><code>test_replica_scenario_changes_only_intended_property</code> (only replicas 1 &rarr; 3, other 39 resources identical)</td>
+      </tr>
+      <tr>
+        <td>Invalid mutations fail clearly</td>
+        <td><span class="badge badge-pass">PASS</span></td>
+        <td><code>test_invalid_mutations_fail_clearly</code> (TargetNotFoundError, DuplicateResourceError)</td>
+      </tr>
+      <tr>
+        <td>Repeated runs produce identical output</td>
+        <td><span class="badge badge-pass">PASS</span></td>
+        <td><code>test_repeated_runs_produce_identical_output</code> (100% deterministic byte-for-byte serialization)</td>
+      </tr>
     </tbody>
   </table>
 
   <h2>5. Test Suite Execution Summary</h2>
   <div class="card">
-    <strong>Test Execution Command:</strong> <code>python -m unittest discover -s tests -v</code><br>
-    <strong>Overall Result:</strong> <strong>Ran 48 tests in 0.070s &mdash; OK (0 failures, 0 errors)</strong><br>
-    Coverage includes: <code>test_h2.py</code> (10 tests), <code>test_h2_fixture.py</code> (8 tests), <code>test_h3.py</code> (17 tests), and <code>test_h4.py</code> (13 tests).
+    <strong>Test Execution Command:</strong> <code>python run_tests.py</code> (or <code>python -m unittest discover -s tests -v</code>)<br>
+    <strong>Overall Result:</strong> <strong>Ran 56 tests in 0.120s &mdash; OK (0 failures, 0 errors)</strong><br>
+    Coverage includes: <code>test_h2.py</code> (10 tests), <code>test_h2_fixture.py</code> (8 tests), <code>test_h3.py</code> (17 tests), <code>test_h4.py</code> (13 tests), and <code>test_h5.py</code> (8 tests).
   </div>
 
   <h2>6. Summary of Changed and Created Files</h2>
