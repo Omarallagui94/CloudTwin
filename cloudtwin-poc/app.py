@@ -414,7 +414,6 @@ def render_infrastructure(mode: str, region: str, cluster_name: str) -> None:
         render_infrastructure_view(twin, labels[fixture_id])
         return
 
-    st.warning("Le mode Live interroge AWS et Kubernetes en lecture seule. Il n'applique jamais de changement.")
     columns = st.columns(2)
     with columns[0]:
         if st.button("Test read-only connections", use_container_width=True):
