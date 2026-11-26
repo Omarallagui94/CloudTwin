@@ -93,6 +93,8 @@ def configure_page() -> None:
         .sim-card strong { color:#E9EDFF; font-size:1.05rem; }
         .sim-id { color:#9AA3C7; font-size:.72rem; margin-top:.35rem; overflow-wrap:anywhere; }
         .sim-value { font-size:1.65rem; font-weight:800; color:#E9EDFF; margin:.35rem 0; }
+        .sim-value.long { font-family:"IBM Plex Mono", monospace; font-size:.9rem; font-weight:500; line-height:1.55;
+          color:#C9CFEA; white-space:pre-wrap; overflow-wrap:anywhere; background:#0E1430; border-radius:8px; padding:.6rem .7rem; }
         .sim-future { border-top:4px solid #5EE6D8; } .sim-removed { border-top:4px solid #FF5470; opacity:.78; }
         .sim-removed strong { text-decoration:line-through; }
         .diff-stat { background:#161E42; border:1px solid #2A3566; border-radius:12px; padding:.75rem 1rem; }
@@ -733,6 +735,13 @@ def render_affected_resources() -> None:
         st.json(result)
 
 
+def _value_html(value: Any) -> str:
+    """Une valeur de carte : en grand si elle est courte (3, ClusterIP), en code sinon."""
+    text = json.dumps(value, indent=1, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+    long = isinstance(value, (dict, list)) or len(text) > 24
+    return f'<div class="sim-value{" long" if long else ""}">{html.escape(text)}</div>'
+
+
 def render_human_diff(
     diff: dict[str, Any], current: dict[str, Any], future: dict[str, Any]
 ) -> None:
@@ -740,7 +749,12 @@ def render_human_diff(
     for change in groups["modified"]:
         name = _display_name(change["resource_id"], current, future)
         prop = change["property"].split(".")[-1].replace("_", " ").title()
-        st.markdown(f"**Modified — {name}**  \n{prop}: `{change.get('before')}` → `{change.get('after')}`")
+        before, after = change.get("before"), change.get("after")
+        if isinstance(before, (dict, list)) or isinstance(after, (dict, list)):
+            lines = ui.value_changes(prop, before, after)  # seulement ce qui change vraiment
+            st.markdown(f"**Modified — {name}**  \n" + "  \n".join(f"`{line}`" for line in lines))
+        else:
+            st.markdown(f"**Modified — {name}**  \n{prop}: `{before}` → `{after}`")
     for change in groups["removed"]:
         st.markdown(f"**Removed resource — {_display_name(change['resource_id'], current, future)}**")
     for relationship in groups["relationships_removed"]:
@@ -832,7 +846,7 @@ def render_simulation_experience(
             current_value = "PRESENT" if deleted else change.get("before")
             st.markdown(
                 f'<div class="sim-card"><div class="eyebrow">CURRENT TWIN</div><strong>{html.escape(target_name)}</strong>'
-                f'<div class="sim-value">{html.escape(str(current_value))}</div><span>{property_name}</span>'
+                f'{_value_html(current_value)}<span>{property_name}</span>'
                 f'<div class="sim-id">{html.escape(change["resource_id"])}</div></div>', unsafe_allow_html=True,
             )
         with arrow_col:
@@ -842,7 +856,7 @@ def render_simulation_experience(
             card_class = "sim-card sim-removed" if deleted else "sim-card sim-future"
             st.markdown(
                 f'<div class="{card_class}"><div class="eyebrow">FUTURE TWIN — SIMULATED</div><strong>{html.escape(target_name)}</strong>'
-                f'<div class="sim-value">{html.escape(str(future_value))}</div><span>{property_name}</span>'
+                f'{_value_html(future_value)}<span>{property_name}</span>'
                 f'<div class="sim-id">No infrastructure mutation performed</div></div>', unsafe_allow_html=True,
             )
         st.markdown("### State Diff")
