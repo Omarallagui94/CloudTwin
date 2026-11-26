@@ -60,8 +60,8 @@ def impact_graph_html(out: dict[str, Any]) -> str:
     attack = attack_edges(analysis["findings"])
     attack_nodes = {n for edge in attack for n in edge}
 
-    net = Network(height="620px", width="100%", directed=True, bgcolor="#ffffff",
-                  font_color="#0f172a", cdn_resources="in_line")
+    net = Network(height="620px", width="100%", directed=True, bgcolor="#121A3A",
+                  font_color="#E9EDFF", cdn_resources="in_line")
     net.set_options('{"physics":{"barnesHut":{"gravitationalConstant":-9000,"springLength":140}},'
                     '"interaction":{"hover":true,"navigationButtons":true},'
                     '"edges":{"arrows":{"to":{"enabled":true,"scaleFactor":0.6}},"smooth":{"type":"dynamic"}}}')
@@ -84,7 +84,7 @@ def impact_graph_html(out: dict[str, Any]) -> str:
         if rel["source"] in ids and rel["target"] in ids:
             on_path = (rel["source"], rel["target"]) in attack
             net.add_edge(rel["source"], rel["target"], title=rel["type"],
-                         color=ATTACK_EDGE if on_path else "#cbd5e1", width=4 if on_path else 1)
+                         color=ATTACK_EDGE if on_path else "#3B4880", width=4 if on_path else 1)
     for source, target in attack:
         if not any(r["source"] == source and r["target"] == target for r in twin["relationships"]):
             net.add_edge(source, target, title="chemin d'attaque", color=ATTACK_EDGE, width=4, dashes=True)
