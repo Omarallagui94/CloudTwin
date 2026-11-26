@@ -325,17 +325,17 @@ def _short(value: Any, limit: int = 60) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def _delta(path: str, before: Any, after: Any) -> list[str]:
+def value_changes(path: str, before: Any, after: Any) -> list[str]:
     """Ce qui change vraiment entre deux valeurs, chemin par chemin."""
     if isinstance(before, dict) and isinstance(after, dict):
         out: list[str] = []
         for key in sorted(set(before) | set(after)):
             if before.get(key) != after.get(key):
-                out += _delta(f"{path}.{key}", before.get(key), after.get(key))
+                out += value_changes(f"{path}.{key}", before.get(key), after.get(key))
         return out
     if isinstance(before, list) and isinstance(after, list):
         if len(before) == len(after) and all(isinstance(x, dict) for x in before + after):
-            return [line for i, (b, a) in enumerate(zip(before, after)) for line in _delta(f"{path}[{i}]", b, a)]
+            return [line for i, (b, a) in enumerate(zip(before, after)) for line in value_changes(f"{path}[{i}]", b, a)]
         added = [_short(x, 40) for x in after if x not in before]
         removed = [_short(x, 40) for x in before if x not in after]
         parts = [f"+ {x}" for x in added] + [f"− {x}" for x in removed]
@@ -357,7 +357,7 @@ def change_line(changeset: dict[str, Any], names: dict[str, str] | None = None) 
             parts.append(f"{name} : créé")
         else:
             prop = (change.get("property_path") or "").removeprefix("properties.")
-            parts += [f"{name} · {line}" for line in _delta(prop, change.get("before"), change.get("after"))]
+            parts += [f"{name} · {line}" for line in value_changes(prop, change.get("before"), change.get("after"))]
     return "\n".join(parts)
 
 
