@@ -1,19 +1,40 @@
-# Thème CloudTwin : lu par Streamlit quand on lance `streamlit run app.py` depuis cloudtwin-poc/.
+# Thème CloudTwin « Miroir » (sombre) : lu par Streamlit quand on lance `streamlit run app.py` depuis cloudtwin-poc/.
 # Les polices sont servies depuis static/fonts : la démo marche aussi sans Internet.
 
 [server]
 enableStaticServing = true
 
 [theme]
-base = "light"
-primaryColor = "#0E7C86"
-backgroundColor = "#EEF2F6"
-secondaryBackgroundColor = "#FFFFFF"
-textColor = "#1B2433"
-font = "IBM Plex Sans, system-ui, sans-serif"
+base = "dark"
+primaryColor = "#5EE6D8"
+backgroundColor = "#0E1430"
+secondaryBackgroundColor = "#161E42"
+textColor = "#E9EDFF"
+font = "Sora, system-ui, sans-serif"
 codeFont = "IBM Plex Mono, ui-monospace, monospace"
-baseRadius = "8px"
-borderColor = "#D5DDE7"
+baseRadius = "10px"
+borderColor = "#2A3566"
+linkColor = "#5EE6D8"
+
+[[theme.fontFaces]]
+family = "Sora"
+url = "app/static/fonts/sora-latin-400-normal.woff2"
+weight = 400
+
+[[theme.fontFaces]]
+family = "Sora"
+url = "app/static/fonts/sora-latin-600-normal.woff2"
+weight = 600
+
+[[theme.fontFaces]]
+family = "Sora"
+url = "app/static/fonts/sora-latin-700-normal.woff2"
+weight = 700
+
+[[theme.fontFaces]]
+family = "Sora"
+url = "app/static/fonts/sora-latin-800-normal.woff2"
+weight = 800
 
 [[theme.fontFaces]]
 family = "IBM Plex Sans"
@@ -46,11 +67,11 @@ url = "app/static/fonts/ibm-plex-mono-latin-500-normal.woff2"
 weight = 500
 
 [theme.sidebar]
-backgroundColor = "#1B2433"
-secondaryBackgroundColor = "#26324A"
-textColor = "#DCE3EE"
-primaryColor = "#5FC4CC"
-borderColor = "#34425C"
+backgroundColor = "#0A0F26"
+secondaryBackgroundColor = "#161E42"
+textColor = "#C9CFEA"
+primaryColor = "#5EE6D8"
+borderColor = "#232C5C"
 
 [client]
 toolbarMode = "viewer"

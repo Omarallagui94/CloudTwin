@@ -77,27 +77,28 @@ def configure_page() -> None:
     st.markdown(
         """
         <style>
-        .hero { padding: 2rem; border-radius: 18px; color: white; background: linear-gradient(125deg,#0f172a,#164e63); box-shadow: 0 12px 32px rgba(15,23,42,.16); }
+        .hero { padding: 2rem; border-radius: 20px; color: #E9EDFF; background: linear-gradient(125deg,#161E42,#1C2550); border:1px solid #2A3566; }
         .hero h1 { margin: 0; font-size: 2.45rem; letter-spacing: -.03em; }
-        .hero p { margin: .45rem 0 0; color: #bae6fd; font-size: 1.12rem; }
-        .status-row { background: white; border: 1px solid #e2e8f0; border-radius: 11px; padding: .8rem 1rem; margin: .45rem 0; display: flex; justify-content: space-between; align-items: center; }
-        .badge { border-radius: 999px; padding: .23rem .62rem; font-size: .72rem; font-weight: 760; }
-        .ready { background:#dcfce7; color:#166534; } .partial { background:#fef3c7; color:#92400e; } .future { background:#e2e8f0; color:#475569; }
+        .hero p { margin: .45rem 0 0; color: #5EE6D8; font-size: 1.12rem; }
+        .status-row { background: #161E42; border: 1px solid #2A3566; border-radius: 12px; padding: .8rem 1rem; margin: .45rem 0; display: flex; justify-content: space-between; align-items: center; }
+        .badge { border-radius: 999px; padding: .23rem .62rem; font-size: .72rem; font-weight: 700; }
+        .ready { background:rgba(70,201,138,.15); color:#46C98A; } .partial { background:rgba(242,181,68,.15); color:#F2B544; } .future { background:#232C5C; color:#9AA3C7; }
         .flow { display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; margin:1rem 0; }
-        .flow-step { background:white; border:1px solid #cbd5e1; border-radius:10px; padding:.65rem .8rem; font-weight:680; color:#1e293b; }
-        .flow-arrow { color:#94a3b8; font-weight:800; }
-        .proposal { background:#fff; border:1px solid #cbd5e1; border-left:5px solid #0E7C86; border-radius:12px; padding:1.1rem 1.25rem; }
-        .pipeline-done { color:#166534; font-weight:700; } .pipeline-next { color:#64748b; }
-        .sim-card { background:white; border:1px solid #dbe3ee; border-radius:14px; padding:1rem 1.1rem; min-height:105px; }
-        .sim-card strong { color:#0f172a; font-size:1.05rem; }
-        .sim-id { color:#64748b; font-size:.72rem; margin-top:.35rem; overflow-wrap:anywhere; }
-        .sim-value { font-size:1.65rem; font-weight:780; color:#0f172a; margin:.35rem 0; }
-        .sim-future { border-top:4px solid #0E7C86; } .sim-removed { border-top:4px solid #b91c1c; opacity:.78; }
+        .flow-step { background:#161E42; border:1px solid #2A3566; border-radius:10px; padding:.65rem .8rem; font-weight:600; color:#E9EDFF; }
+        .flow-arrow { color:#5EE6D8; font-weight:800; }
+        .proposal { background:#161E42; border:1px solid #2A3566; border-left:5px solid #5EE6D8; border-radius:14px; padding:1.1rem 1.25rem; color:#C9CFEA; }
+        .proposal h4 { color:#E9EDFF; }
+        .pipeline-done { color:#46C98A; font-weight:700; } .pipeline-next { color:#9AA3C7; }
+        .sim-card { background:#161E42; border:1px solid #2A3566; border-radius:14px; padding:1rem 1.1rem; min-height:105px; }
+        .sim-card strong { color:#E9EDFF; font-size:1.05rem; }
+        .sim-id { color:#9AA3C7; font-size:.72rem; margin-top:.35rem; overflow-wrap:anywhere; }
+        .sim-value { font-size:1.65rem; font-weight:800; color:#E9EDFF; margin:.35rem 0; }
+        .sim-future { border-top:4px solid #5EE6D8; } .sim-removed { border-top:4px solid #FF5470; opacity:.78; }
         .sim-removed strong { text-decoration:line-through; }
-        .diff-stat { background:white; border:1px solid #e2e8f0; border-radius:12px; padding:.75rem 1rem; }
-        .diff-stat.active { border-color:#94a3b8; box-shadow:0 3px 10px rgba(15,23,42,.07); }
-        .diff-number { font-size:1.55rem; font-weight:780; color:#64748b; } .diff-stat.active .diff-number { color:#0f172a; }
-        .relationship-card { background:white; border-left:4px solid #b91c1c; border-radius:10px; padding:.8rem 1rem; margin:.55rem 0; }
+        .diff-stat { background:#161E42; border:1px solid #2A3566; border-radius:12px; padding:.75rem 1rem; }
+        .diff-stat.active { border-color:#5EE6D8; box-shadow:0 0 0 1px #5EE6D8 inset; }
+        .diff-number { font-size:1.55rem; font-weight:800; color:#9AA3C7; } .diff-stat.active .diff-number { color:#E9EDFF; }
+        .relationship-card { background:#161E42; border:1px solid #2A3566; border-left:4px solid #FF5470; border-radius:12px; padding:.8rem 1rem; margin:.55rem 0; color:#C9CFEA; }
         </style>
         """ + ui.CSS,
         unsafe_allow_html=True,
@@ -812,7 +813,7 @@ def render_simulation_experience(
                 f'<div class="sim-id">{html.escape(change["resource_id"])}</div></div>', unsafe_allow_html=True,
             )
         with arrow_col:
-            st.markdown('<div style="font-size:2rem;text-align:center;padding-top:2.5rem;color:#64748b">→</div>', unsafe_allow_html=True)
+            st.markdown('<div style="font-size:2rem;text-align:center;padding-top:2.5rem;color:#5EE6D8">→</div>', unsafe_allow_html=True)
         with future_col:
             future_value = "REMOVED" if deleted else change.get("after")
             card_class = "sim-card sim-removed" if deleted else "sim-card sim-future"
@@ -1013,18 +1014,62 @@ def render_attack_graph(changeset: dict[str, Any], result: dict[str, Any]) -> No
     components.html(impact_graph_html(out), height=640, scrolling=False)
 
 
+def load_scenario_for_analysis(mode: str) -> None:
+    """Rappel du sélecteur S01–S05 : on simule le scénario choisi sans passer par Change Assistant."""
+    scenario_id = st.session_state.get("analysis_pick") or ""
+    scenario = scenarios().get(scenario_id)
+    if scenario is None:
+        return
+    twin = fixture_for_scenario(scenario_id) if mode == "Local Fixture Mode" else current_twin_for(scenario, mode)
+    if twin is None:
+        st.session_state.confirmation_error = "Aucun Current Twin disponible : lance d'abord la découverte."
+        return
+    set_pending_change(scenario, twin, scenario_id)
+    confirm_pending_change()
+
+
+def render_scenario_switch(mode: str) -> None:
+    options = list(scenarios())
+    current = (st.session_state.get("pending_scenario") or {}).get("scenario_id")
+    # Le sélecteur suit le changement confirmé, même s'il vient de Change Assistant.
+    st.session_state.analysis_pick = current if current in options and st.session_state.get("confirmed_changeset") else None
+    st.segmented_control(
+        "Simuler un scénario", options, key="analysis_pick",
+        on_change=load_scenario_for_analysis, args=(mode,),
+        help="Chaque scénario est simulé sur le jumeau : rien n'est déployé.",
+    )
+    if st.session_state.get("confirmation_error"):
+        st.error(st.session_state.confirmation_error)
+
+
 def render_analysis(mode: str, region: str, cluster_name: str) -> None:
     result = st.session_state.get("analysis_result")
     changeset = st.session_state.get("confirmed_changeset")
     if not result or not changeset:
-        st.markdown(ui.page_head(
-            "Analysis", "Confirme un changement dans Change Assistant : son analyse de risque s'affiche ici.",
-        ), unsafe_allow_html=True)
+        head, switch = st.columns([3, 2], vertical_alignment="bottom")
+        with head:
+            st.markdown(ui.page_head(
+                "Analysis", "Choisis un scénario ici, ou confirme un changement dans Change Assistant : "
+                "le Current Twin et le Future Twin s'affichent face à face.",
+            ), unsafe_allow_html=True)
+        with switch:
+            render_scenario_switch(mode)
         render_pipeline()
         return
     scenario = st.session_state["pending_scenario"]
-    st.markdown(ui.page_head("Analysis", scenario.get("name", "Changement proposé")), unsafe_allow_html=True)
-    st.markdown(ui.verdict_strip(result.get("risk") or {}, result.get("findings", [])), unsafe_allow_html=True)
+    current = st.session_state["pending_twin"]
+    names = {r["id"]: r.get("name", r["id"]) for r in current.get("resources", [])}
+    head, switch = st.columns([3, 2], vertical_alignment="bottom")
+    with head:
+        label = ", ".join(x for x in (scenario.get("scenario_id"), scenario.get("name")) if x)
+        st.markdown(ui.page_head(label or "Changement proposé",
+                                 scenario.get("description") or "Changement proposé, simulé sur le jumeau."),
+                    unsafe_allow_html=True)
+    with switch:
+        render_scenario_switch(mode)
+    st.markdown(f'<div class="change-chip">{html.escape(ui.change_line(changeset, names))}</div>',
+                unsafe_allow_html=True)
+    st.markdown(ui.mirror(current, st.session_state["future_twin"], changeset, result), unsafe_allow_html=True)
     for warning in st.session_state.get("simulation_warnings") or []:
         st.caption(f"Simulation : {warning}")
     tabs = st.tabs(["Risque", "Impact et chemin d'attaque", "Analyste IA", "Correctifs vérifiés", "Simulation"])

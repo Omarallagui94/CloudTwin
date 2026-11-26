@@ -162,8 +162,9 @@ def test_analysis_page_links_risk_impact_ai_and_verified_fixes():
     assert not app.exception
     labels = [tab.label for tab in app.tabs]
     assert labels[:5] == ["Risque", "Impact et chemin d'attaque", "Analyste IA", "Correctifs vérifiés", "Simulation"]
-    verdict = next(m.value for m in app.markdown if 'class="verdict"' in m.value)
-    assert '<span class="num">30</span>' in verdict and "Risque <span>moyen</span>" in verdict
+    mirror = next(m.value for m in app.markdown if 'class="mirror"' in m.value)
+    assert '<span class="num">30</span>' in mirror and "Risque <span>moyen</span>" in mirror
+    assert "Current Twin" in mirror and "Future Twin simulé" in mirror
     # Analyste IA (texte de secours, sans LLM) : il cite le score des règles, il ne le change pas.
     assert any(m.value.startswith("> Ce changement obtient 30/100") for m in app.markdown)
     # Correctifs rejoués dans le jumeau.
@@ -185,6 +186,20 @@ def test_llm_toggle_waits_for_click_and_falls_back_without_ollama():
     # Pas de serveur Ollama ici : le rapport sort quand même, avec le texte de secours.
     assert any(m.value.startswith("> Ce changement obtient 30/100") for m in app.markdown)
     assert any("30 → **0/100**" in m.value for m in app.markdown)
+
+
+def test_analysis_scenario_switch_simulates_without_change_assistant():
+    app = AppTest.from_file(APP_PATH, default_timeout=15).run()
+    app.radio[0].set_value("Analysis").run()
+    switch = app.get("button_group")[0]
+    switch.set_value("S04").run()
+    assert not app.exception
+    mirror = next(m.value for m in app.markdown if 'class="mirror"' in m.value)
+    assert '<span class="num">30</span>' in mirror and "Internet" in mirror
+    assert any("ingress_rules" in m.value and "change-chip" in m.value for m in app.markdown)
+    app.get("button_group")[0].set_value("S05").run()
+    mirror = next(m.value for m in app.markdown if 'class="mirror"' in m.value)
+    assert '<span class="num">11</span>' in mirror and "supprimé" in mirror
 
 
 # ------------------------------------------------------------- Infrastructure

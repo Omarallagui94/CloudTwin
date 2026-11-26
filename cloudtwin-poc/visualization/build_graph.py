@@ -355,7 +355,7 @@ def _selection_script() -> str:
         }));
         edges.update(edges.get().map(function (edge) {
           const active = edge.from === selected || edge.to === selected;
-          return {id: edge.id, color: {color: active ? '#334155' : '#cbd5e1', opacity: active ? 1 : 0.12}};
+          return {id: edge.id, color: {color: active ? '#5EE6D8' : '#3B4880', opacity: active ? 1 : 0.12}};
         }));
         const node = nodes.get(selected);
         document.getElementById('cloudtwin-detail-content').innerHTML = node.title || node.label;
@@ -372,13 +372,13 @@ def _selection_script() -> str:
 def _graph_overlay() -> str:
     return """
     <style>
-      #mynetwork { border: 1px solid #e2e8f0 !important; border-radius: 18px; background: linear-gradient(180deg,#fbfdff 0%,#f8fafc 100%) !important; }
+      #mynetwork { border: 1px solid #2A3566 !important; border-radius: 18px; background: #121A3A !important; }
       .ct-toolbar { position:absolute; top:14px; left:14px; z-index:20; display:flex; gap:8px; }
-      .ct-toolbar button { border:1px solid #cbd5e1; background:rgba(255,255,255,.94); color:#334155; border-radius:9px; padding:7px 11px; font:600 12px Inter,Arial,sans-serif; box-shadow:0 2px 8px rgba(15,23,42,.08); cursor:pointer; }
-      .ct-toolbar button:hover { background:#f1f5f9; }
-      .ct-details { position:absolute; top:14px; right:14px; z-index:20; width:280px; max-height:240px; overflow:auto; border:1px solid #dbe3ee; background:rgba(255,255,255,.96); border-radius:12px; padding:12px 14px; box-shadow:0 8px 24px rgba(15,23,42,.10); color:#334155; font:12px/1.55 Inter,Arial,sans-serif; backdrop-filter:blur(8px); }
-      .ct-details strong { display:block; color:#0f172a; font-size:13px; margin-bottom:5px; }
-      .ct-muted { color:#64748b; }
+      .ct-toolbar button { border:1px solid #2A3566; background:#161E42; color:#E9EDFF; border-radius:9px; padding:7px 11px; font:600 12px Inter,Arial,sans-serif; box-shadow:0 2px 8px rgba(15,23,42,.08); cursor:pointer; }
+      .ct-toolbar button:hover { background:#1C2550; }
+      .ct-details { position:absolute; top:14px; right:14px; z-index:20; width:280px; max-height:240px; overflow:auto; border:1px solid #2A3566; background:rgba(22,30,66,.96); border-radius:12px; padding:12px 14px; box-shadow:0 8px 24px rgba(0,0,0,.35); color:#C9CFEA; font:12px/1.55 Inter,Arial,sans-serif; backdrop-filter:blur(8px); }
+      .ct-details strong { display:block; color:#E9EDFF; font-size:13px; margin-bottom:5px; }
+      .ct-muted { color:#9AA3C7; }
     </style>
     <div class="ct-toolbar">
       <button onclick="network.fit({animation:{duration:450,easingFunction:'easeInOutQuad'}})">Fit view</button>
@@ -399,15 +399,15 @@ def build_graph(twin: dict[str, Any], output: Path = OUTPUT, *, view: str = "Ful
 
     simplified = view != "Full Infrastructure"
     network = Network(
-        height="860px", width="100%", directed=True, bgcolor="#f8fafc",
-        font_color="#0f172a", select_menu=False, filter_menu=False, cdn_resources="in_line",
+        height="860px", width="100%", directed=True, bgcolor="#121A3A",
+        font_color="#E9EDFF", select_menu=False, filter_menu=False, cdn_resources="in_line",
     )
     if simplified:
         network.set_options("""
         {"layout":{"hierarchical":{"enabled":true,"direction":"UD","sortMethod":"directed","levelSeparation":150,"nodeSpacing":180,"treeSpacing":220,"blockShifting":true,"edgeMinimization":true,"parentCentralization":true}},
          "physics":{"enabled":false},
          "interaction":{"hover":true,"navigationButtons":true,"keyboard":true,"multiselect":false},
-         "edges":{"arrows":{"to":{"enabled":true,"scaleFactor":0.55}},"smooth":{"enabled":true,"type":"cubicBezier","forceDirection":"vertical","roundness":0.35},"font":{"size":10,"align":"middle","color":"#475569","strokeWidth":3,"strokeColor":"#f8fafc"}}}
+         "edges":{"arrows":{"to":{"enabled":true,"scaleFactor":0.55}},"smooth":{"enabled":true,"type":"cubicBezier","forceDirection":"vertical","roundness":0.35},"font":{"size":10,"align":"middle","color":"#9AA3C7","strokeWidth":3,"strokeColor":"#121A3A"}}}
         """)
     else:
         network.set_options("""
@@ -437,7 +437,7 @@ def build_graph(twin: dict[str, Any], output: Path = OUTPUT, *, view: str = "Ful
             "shape": "image",
             "image": icon_data_uri(icon_name(data), color),
             "size": size,
-            "font": {"size": 12, "face": "Inter, Arial, sans-serif", "color": "#1e293b", "vadjust": 5},
+            "font": {"size": 12, "face": "Sora, Inter, Arial, sans-serif", "color": "#E9EDFF", "vadjust": 5},
             "shapeProperties": {"useBorderWithImage": False, "interpolation": True},
         }
         if data["type"] in levels:
