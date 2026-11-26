@@ -131,3 +131,51 @@ def test_s01_report_action_generates_preview_and_local_html_download():
     assert report["filename"].startswith("cloudtwin-simulation-S01-")
     assert report["filename"].endswith(".html")
     assert "SIMULATION ONLY" in report["html"]
+
+
+# --------------------------------------------- Analysis : IA, correctifs, chemin d'attaque
+
+def _analysis_for(button_index: int) -> AppTest:
+    app = _change_assistant()
+    app.button[button_index].click().run()
+    app.button[6].click().run()  # Confirm for Analysis
+    app.radio[0].set_value("Analysis").run()
+    return app
+
+
+def test_security_scenarios_s03_and_s04_reach_the_analysis_page():
+    """S03 et S04 modifient une propriété absente de leur fixture : la simulation doit aboutir."""
+    for index, rule in ((2, "RULE-NET-004"), (3, "RULE-NET-003")):
+        app = _analysis_for(index)
+        assert not app.exception
+        assert "confirmation_error" not in app.session_state
+        assert any(rule in item.value for item in app.error)
+
+
+def test_analysis_page_links_risk_impact_ai_and_verified_fixes():
+    app = _analysis_for(3)  # S04 : PostgreSQL ouvert à Internet
+    assert not app.exception
+    labels = [tab.label for tab in app.tabs]
+    assert labels[-4:] == ["Risque", "Impact et chemin d'attaque", "Analyste IA", "Correctifs vérifiés"]
+    assert any(m.label == "Risk Score" and m.value == "30 / 100" for m in app.metric)
+    # Analyste IA (texte de secours, sans LLM) : il cite le score des règles, il ne le change pas.
+    assert any(m.value.startswith("> Ce changement obtient 30/100") for m in app.markdown)
+    # Correctifs rejoués dans le jumeau.
+    assert app.dataframe
+    assert any("30 → **0/100**" in m.value for m in app.markdown)
+    pipeline = "\n".join(m.value for m in app.markdown)
+    assert "AI Explanation — COMPLETE" in pipeline
+    assert "Verified Fixes — COMPLETE" in pipeline
+
+
+def test_llm_toggle_waits_for_click_and_falls_back_without_ollama():
+    app = _analysis_for(3)
+    app.toggle[0].set_value(True).run()
+    app.number_input[0].set_value(5).run()
+    ask = [b for b in app.button if b.label == "Demander à l'analyste IA"]
+    assert ask, "avec Ollama activé, l'appel attend un clic"
+    ask[0].click().run()
+    assert not app.exception
+    # Pas de serveur Ollama ici : le rapport sort quand même, avec le texte de secours.
+    assert any(m.value.startswith("> Ce changement obtient 30/100") for m in app.markdown)
+    assert any("30 → **0/100**" in m.value for m in app.markdown)

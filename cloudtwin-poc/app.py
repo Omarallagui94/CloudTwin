@@ -26,7 +26,14 @@ from integration.hamdi_fatma import context_from_changeset
 from integration.scenario_compat import CompatibilityError, discover_scenarios
 from reporting import build_simulation_report
 from simulation import (
-    SimulationError, analyze_affected_resources, calculate_state_diff, simulate_future_twin,
+    SimulationError, analyze_affected_resources, build_future_twin, calculate_state_diff,
+    simulate_future_twin,
+)
+from analysis.models import AnalysisContext
+from ai_analyst.fixes import remediate_with_ai
+from visualization.simulation_view import (
+    ATTACK_EDGE, HIGHLIGHT, impact_graph_html, llm_client, render_ai, render_fixes,
+    render_llm_settings,
 )
 from visualization.build_graph import (
     allowed_types, build_graph, legend_items, project_diff, project_twin, readable_label,
@@ -250,13 +257,20 @@ def render_pipeline(
             style = "pipeline-done" if analysis_ready else "pipeline-next"
             status = "COMPLETE" if analysis_ready else "AWAITING CHANGE"
             st.markdown(f'<div class="{style}">{item} — {status}</div>', unsafe_allow_html=True)
+    explanation = st.session_state.get("analysis_explanation") or {}
+    ai_ready = analysis_ready and bool(explanation)
+    ai_status = ("COMPLETE — LLM" if explanation.get("source") == "llm"
+                 else "COMPLETE — texte de secours") if ai_ready else "AWAITING CHANGE"
+    fixes_ready = any(entry[1] for entry in (st.session_state.get("ai_cache") or {}).values())
     with right:
-        for item, done in (
-            ("Affected Resources", affected_ready), ("Blast Radius", analysis_ready),
-            ("Risk Score", analysis_ready), ("AI Explanation", False),
+        for item, done, status in (
+            ("Affected Resources", affected_ready, None), ("Blast Radius", analysis_ready, None),
+            ("Risk Score", analysis_ready, None), ("AI Explanation", ai_ready, ai_status),
+            ("Verified Fixes", fixes_ready, "COMPLETE" if fixes_ready
+             else ("READY — onglet Correctifs vérifiés" if analysis_ready else "AWAITING CHANGE")),
         ):
             style = "pipeline-done" if done else "pipeline-next"
-            status = "COMPLETE" if done else ("PARTIAL" if item == "AI Explanation" else "AWAITING CHANGE")
+            status = status or ("COMPLETE" if done else "AWAITING CHANGE")
             st.markdown(f'<div class="{style}">{item} — {status}</div>', unsafe_allow_html=True)
 
 
@@ -470,12 +484,31 @@ def render_proposal(scenario: dict[str, Any]) -> None:
     )
 
 
+def future_twin_for(twin: dict[str, Any], changeset: Any) -> dict[str, Any]:
+    """Future Twin strict ; si la fixture n'a pas encore la propriété modifiée, interface canonique.
+
+    Exemples : S03 (`service_type_and_scheme`, propriété composée) et S04 (`ingress_rules`,
+    absente de la fixture qui ne garde que le nombre de règles). L'interface stricte refuse ;
+    `build_future_twin` ajoute la propriété et le signale en avertissement. Une valeur `before`
+    périmée reste une erreur : elle est déjà refusée par l'ingestion (strict_conflict_check).
+    """
+    st.session_state.pop("simulation_warnings", None)
+    try:
+        return simulate_future_twin(twin, changeset)
+    except SimulationError as exc:
+        if "does not exist" not in str(exc):
+            raise
+    built = build_future_twin(twin, changeset.changes)
+    st.session_state.simulation_warnings = built.warnings
+    return built.twin
+
+
 def confirm_pending_change() -> None:
     scenario = st.session_state.pending_scenario
     twin = st.session_state.pending_twin
     try:
         changeset = ChangeIngester(twin).ingest_scenario(scenario, strict_conflict_check=True)
-        future_twin = simulate_future_twin(twin, changeset)
+        future_twin = future_twin_for(twin, changeset)
         state_diff = calculate_state_diff(twin, future_twin)
         diff_data = state_diff.to_dict()
         structural = analyze_affected_resources(diff_data, twin, future_twin, changeset)
@@ -490,6 +523,10 @@ def confirm_pending_change() -> None:
     st.session_state.confirmed_changeset = changeset.to_dict()
     st.session_state.analysis_result = result.model_dump(mode="json")
     st.session_state.analysis_explanation = explanation
+    # Objets gardés pour l'analyste IA et les correctifs vérifiés (page Analysis).
+    st.session_state.analysis_context = context
+    st.session_state.analysis_result_obj = result
+    st.session_state.ai_cache = {}
     st.session_state.future_twin = future_twin
     st.session_state.state_diff = state_diff.to_dict()
     st.session_state.affected_resources = structural.model_dump(mode="json")
@@ -862,10 +899,54 @@ def render_analysis_result(result: dict[str, Any]) -> None:
     st.write(risk.get("explanation", "No score explanation available."))
     st.caption(f"Findings: {risk.get('findings_points', 0)} · Blast radius: {risk.get('blast_radius_bonus', 0)}")
 
-    explanation = st.session_state.get("analysis_explanation") or {}
-    st.markdown("### Explanation")
-    st.caption("Source: Ollama" if explanation.get("source") == "llm" else "Source: deterministic fallback")
-    st.write(explanation.get("summary", risk.get("explanation", "Not available")))
+
+
+def ai_outputs(run: bool = False) -> tuple[dict[str, Any], dict[str, Any], list[str]] | None:
+    """Explication IA + correctifs vérifiés pour le changement confirmé, mis en cache.
+
+    Sans LLM, tout est calculé tout de suite (texte de secours + catalogue).
+    Avec Ollama activé, on attend le clic : un appel prend quelques secondes.
+    """
+    context = st.session_state.get("analysis_context")
+    result = st.session_state.get("analysis_result_obj")
+    if context is None or result is None:
+        return None
+    client = llm_client()
+    key = (st.session_state.get("llm_model", "") if client else "", bool(client))
+    cache = st.session_state.setdefault("ai_cache", {})
+    if key not in cache:
+        if client and not run:
+            return None
+        with st.spinner("L'analyste IA rédige son explication et vérifie les correctifs..."):
+            report, rejected = remediate_with_ai(context, result, client)
+            explanation = explain_analysis(result, client=client).model_dump(mode="json")
+        cache[key] = (explanation, report.model_dump(mode="json"), rejected)
+        st.session_state.analysis_explanation = explanation
+    return cache[key]
+
+
+def render_attack_graph(changeset: dict[str, Any], result: dict[str, Any]) -> None:
+    """Future Twin coloré (modifié / direct / indirect) et chemin d'attaque IAM-003."""
+    future = st.session_state.get("future_twin")
+    if not future:
+        st.info("Future Twin indisponible.")
+        return
+    created = [c["resource_id"] for c in changeset["changes"] if c["operation"] == "create"]
+    changed = [c["resource_id"] for c in changeset["changes"] if c["operation"] != "create"]
+    out = {"future_twin": future, "analysis": result,
+           "simulation": {"changed": changed, "created": created}}
+    radius = result.get("blast_radius") or {}
+    cols = st.columns(2)
+    cols[0].metric("Impact direct (1 saut)", len(radius.get("direct", [])))
+    cols[1].metric("Impact indirect (2–3 sauts)", len(radius.get("indirect", [])))
+    st.markdown(
+        f'<span style="color:{HIGHLIGHT["changed"]}">●</span> modifié &nbsp; '
+        f'<span style="color:{HIGHLIGHT["direct"]}">●</span> direct &nbsp; '
+        f'<span style="color:{HIGHLIGHT["indirect"]}">●</span> indirect &nbsp; '
+        f'<span style="color:{ATTACK_EDGE}">━</span> chemin d\'attaque (IAM-003)',
+        unsafe_allow_html=True,
+    )
+    components.html(impact_graph_html(out), height=640, scrolling=False)
 
 
 def render_analysis(mode: str, region: str, cluster_name: str) -> None:
@@ -886,8 +967,29 @@ def render_analysis(mode: str, region: str, cluster_name: str) -> None:
         aws_region=region,
         eks_cluster=cluster_name,
     )
-    render_analysis_result(result)
-    st.info("Structural affected resources are shown separately from Fatma's blast radius and risk interpretation.")
+    for warning in st.session_state.get("simulation_warnings") or []:
+        st.caption(f"Simulation : {warning}")
+    st.header("Analyse de risque")
+    tabs = st.tabs(["Risque", "Impact et chemin d'attaque", "Analyste IA", "Correctifs vérifiés"])
+    with tabs[0]:
+        render_analysis_result(result)
+        st.info("Structural affected resources are shown separately from Fatma's blast radius and risk interpretation.")
+    with tabs[1]:
+        render_attack_graph(changeset, result)
+    ai = ai_outputs()
+    with tabs[2]:
+        if ai is None:
+            st.info("Clique pour interroger le LLM local (quelques secondes).")
+            if st.button("Demander à l'analyste IA", type="primary"):
+                ai = ai_outputs(run=True)
+                st.rerun()
+        else:
+            render_ai(ai[0])
+    with tabs[3]:
+        if ai is None:
+            st.info("Les correctifs apparaissent après la réponse de l'analyste IA (onglet Analyste IA).")
+        else:
+            render_fixes(ai[1], ai[2])
     render_pipeline(
         parsed=True,
         changeset_ready=True,
@@ -907,6 +1009,8 @@ def main() -> None:
         mode = st.radio("Data source", ["Local Fixture Mode", "Live AWS Mode"])
         region = st.text_input("AWS Region", "eu-west-3", disabled=mode == "Local Fixture Mode")
         cluster_name = st.text_input("EKS Cluster", "retail-store", disabled=mode == "Local Fixture Mode")
+        st.divider()
+        render_llm_settings()
         st.divider()
         st.caption("Read-only simulation. No apply, deploy, or delete actions.")
     if mode == "Local Fixture Mode" and "twin" not in st.session_state:
