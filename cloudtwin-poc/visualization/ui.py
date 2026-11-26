@@ -57,7 +57,45 @@ code, .rid, .mono {{ font-family: "IBM Plex Mono", ui-monospace, monospace; }}
 [data-testid="stBaseButton-primary"] p {{ color: {BG}; }}
 
 /* Barre latérale */
-[data-testid="stSidebar"] h2 {{ font-size: 1.05rem; font-weight: 600; margin-top: .4rem; }}
+[data-testid="stSidebar"] {{ border-right:1px solid #232C5C; }}
+[data-testid="stSidebar"] hr {{ display:none; }}
+[data-testid="stSidebarUserContent"] {{ padding-top: 1.2rem; }}
+.side-title {{ font-size:.78rem; font-weight:600; color:var(--slate); margin:1.6rem 0 .5rem; letter-spacing:.02em; }}
+/* Navigation : des lignes pleines largeur, la page active en cyan.
+   Structure Streamlit 1.67 : radiogroup > div > label[stRadioOption][data-selected] > (input, div > (pastille, texte)) */
+.st-key-nav, .st-key-nav [data-testid="stRadio"], .st-key-data_source, .st-key-data_source [data-testid="stRadio"] {{ width:100% !important; }}
+.st-key-nav [role="radiogroup"] {{ gap:2px; width:100%; }}
+.st-key-nav [role="radiogroup"] > div {{ width:100%; }}
+.st-key-nav [data-testid="stRadioOption"] {{ width:100%; box-sizing:border-box; margin:0; padding:.55rem .8rem; border-radius:10px;
+  border-left:3px solid transparent; transition:background .15s ease; cursor:pointer; }}
+.st-key-nav [data-testid="stRadioOption"] > div > div:first-child,
+.st-key-data_source [data-testid="stRadioOption"] > div > div:first-child {{ display:none; }}
+.st-key-nav [data-testid="stRadioOption"]:hover {{ background:#161E42; }}
+.st-key-nav [data-testid="stRadioOption"][data-selected="true"] {{ background:rgba(94,230,216,.10); border-left-color:var(--cyan); }}
+.st-key-nav [data-testid="stRadioOption"][data-selected="true"] p {{ color:var(--cyan); font-weight:600; }}
+.st-key-nav [data-testid="stRadioOption"] p {{ font-size:.98rem; }}
+.st-key-nav [data-testid="stRadioOption"] span[role="img"] {{ font-size:1.25rem; color:var(--slate); margin-right:.55rem; vertical-align:-4px !important; }}
+.st-key-nav [data-testid="stRadioOption"][data-selected="true"] span[role="img"] {{ color:var(--cyan); }}
+.st-key-nav [data-testid="stRadioOption"]:focus-within,
+.st-key-data_source [data-testid="stRadioOption"]:focus-within {{ outline:2px solid var(--cyan); outline-offset:1px; }}
+/* Source des données : un interrupteur à deux positions */
+.st-key-data_source [role="radiogroup"] {{ flex-direction:row; flex-wrap:nowrap; gap:0; width:100%; background:#161E42;
+  border:1px solid var(--line); border-radius:12px; padding:4px; }}
+.st-key-data_source [role="radiogroup"] > div {{ flex:1; }}
+.st-key-data_source [data-testid="stRadioOption"] {{ width:100%; box-sizing:border-box; justify-content:center; margin:0; padding:.45rem .5rem; border-radius:9px; cursor:pointer; }}
+.st-key-data_source [data-testid="stRadioOption"] > div {{ justify-content:center; width:100%; }}
+.st-key-data_source [data-testid="stRadioOption"][data-selected="true"] {{ background:var(--cyan); }}
+.st-key-data_source [data-testid="stRadioOption"][data-selected="true"] p {{ color:{BG}; font-weight:600; }}
+.st-key-data_source [data-testid="stRadioOption"] p {{ white-space:nowrap; }}
+.side-status {{ display:flex; gap:.55rem; align-items:flex-start; font-size:.82rem; line-height:1.45; color:var(--soft); margin:.6rem 0 0; }}
+.side-status i {{ flex:none; width:8px; height:8px; border-radius:50%; margin-top:.4rem; }}
+.side-last {{ display:block; margin:1.1rem 0 0; padding:.8rem .9rem; border-radius:12px; background:#161E42;
+  border:1px solid var(--line); border-left:4px solid var(--lvl); }}
+.side-last small {{ display:block; font-size:.75rem; color:var(--slate); }}
+.side-last b {{ display:block; font-size:.92rem; color:var(--text); margin:.15rem 0 .1rem; }}
+.side-last span {{ font-size:.85rem; color:var(--lvl); font-weight:600; }}
+.side-foot {{ margin-top:2.2rem; padding-top:1rem; border-top:1px solid #232C5C; font-size:.78rem; color:var(--slate); line-height:1.5; }}
+.side-foot b {{ color:var(--soft); font-weight:600; }}
 .brand {{ display:flex; gap:.75rem; align-items:center; margin:.2rem 0 1.2rem; }}
 .brand-mark {{ width:38px; height:38px; position:relative; flex:none; }}
 .brand-mark i {{ position:absolute; width:24px; height:24px; border-radius:7px; }}
@@ -200,6 +238,30 @@ def brand() -> str:
     return ('<div class="brand"><div class="brand-mark"><i></i><i></i></div>'
             '<div><div class="brand-name">CloudTwin</div>'
             '<div class="brand-sub">Simuler avant de déployer</div></div></div>')
+
+
+def side_title(text: str) -> str:
+    return f'<div class="side-title">{_e(text)}</div>'
+
+
+SIDE_DOTS = {"ok": CYAN, "live": "#F2B544", "ai": "#46C98A", "off": "#5B6490"}
+
+
+def side_status(text: str, kind: str = "ok") -> str:
+    """Une ligne d'état avec une pastille : fixtures, AWS live, IA active ou non."""
+    return f'<div class="side-status"><i style="background:{SIDE_DOTS.get(kind, SLATE)}"></i><span>{_e(text)}</span></div>'
+
+
+def side_last_run(scenario_id: str, name: str, score: int) -> str:
+    """Rappel de la dernière simulation ; la couleur suit le niveau du score."""
+    _, label, color = level_of(score)
+    return (f'<div class="side-last" style="--lvl:{color}"><small>Dernière simulation</small>'
+            f'<b>{_e(scenario_id)}, {_e(name)}</b><span>{score}/100, risque {_e(label.lower())}</span></div>')
+
+
+def side_footer() -> str:
+    return ('<div class="side-foot"><b>Lecture seule.</b> Rien n\'est appliqué, déployé ni supprimé : '
+            'chaque changement est simulé sur le jumeau.<br>TEK-UP 2026-2027</div>')
 
 
 def page_head(title: str, subtitle: str) -> str:

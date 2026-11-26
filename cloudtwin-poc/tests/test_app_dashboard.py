@@ -202,6 +202,18 @@ def test_analysis_scenario_switch_simulates_without_change_assistant():
     assert '<span class="num">11</span>' in mirror and "supprimé" in mirror
 
 
+def test_sidebar_hides_aws_fields_in_fixture_mode_and_recalls_the_last_run():
+    app = AppTest.from_file(APP_PATH, default_timeout=15).run()
+    assert not [t for t in app.text_input if t.label in ("AWS Region", "EKS Cluster")]
+    assert any("aucun appel AWS" in m.value for m in app.sidebar.markdown)
+    app.radio[0].set_value("Analysis").run()
+    app.get("button_group")[0].set_value("S04").run()
+    last = next(m.value for m in app.sidebar.markdown if "side-last" in m.value)
+    assert "S04, Open security group" in last and "30/100, risque moyen" in last
+    app.radio[1].set_value("Live AWS Mode").run()
+    assert {t.label for t in app.text_input} >= {"AWS Region", "EKS Cluster"}
+
+
 # ------------------------------------------------------------- Infrastructure
 
 def test_infrastructure_shows_the_reference_lab_without_any_change():

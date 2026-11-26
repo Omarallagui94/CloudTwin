@@ -263,16 +263,21 @@ def llm_client() -> OllamaClient | None:
 
 
 def render_llm_settings() -> None:
-    st.header("Analyste IA")
+    from visualization import ui  # import local : ui ne dépend pas de Streamlit
+
+    st.markdown(ui.side_title("Analyste IA"), unsafe_allow_html=True)
     st.toggle("Utiliser un LLM local (Ollama)", key="llm_enabled")
     if st.session_state.get("llm_enabled"):
-        st.text_input("Modèle", value="llama3.1", key="llm_model")
-        st.text_input("Adresse Ollama", value="http://localhost:11434", key="llm_url")
-        st.number_input("Délai max par appel (s)", min_value=5, max_value=300, value=30, step=5,
-                        key="llm_timeout", help="llama3.1 répond en ~15 s sur un MacBook.")
-    st.caption("Activé : l'explication et des correctifs sont demandés au LLM local, puis vérifiés par les règles."
-               if st.session_state.get("llm_enabled")
-               else "Désactivé : explication et correctifs du catalogue, sans IA.")
+        model = st.session_state.get("llm_model", "llama3.1")
+        st.markdown(ui.side_status(f"{model} en local, vérifié par les règles.", "ai"), unsafe_allow_html=True)
+        with st.expander("Réglages Ollama"):
+            st.text_input("Modèle", value="llama3.1", key="llm_model")
+            st.text_input("Adresse Ollama", value="http://localhost:11434", key="llm_url")
+            st.number_input("Délai max par appel (s)", min_value=5, max_value=300, value=30, step=5,
+                            key="llm_timeout", help="llama3.1 répond en ~15 s sur un MacBook.")
+    else:
+        st.markdown(ui.side_status("Désactivé : explication et correctifs du catalogue.", "off"),
+                    unsafe_allow_html=True)
 
 
 def render_simulation(scenario_id: str, scenario_dir: Path) -> None:
