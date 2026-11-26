@@ -1,0 +1,32 @@
+﻿version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - python -m pip install --upgrade pip
+      - pip install -r cloudtwin-poc/requirements.txt
+
+  pre_build:
+    commands:
+      - echo "Running CloudTwin tests"
+      - cd cloudtwin-poc
+      - python -m pytest
+      - cd ..
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - ECR_URI="$ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/cloudtwin"
+      - IMAGE_TAG=$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c 1-7)
+      - IMAGE_URI="$ECR_URI:$IMAGE_TAG"
+      - echo "Building $IMAGE_URI"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com"
+
+  build:
+    commands:
+      - docker build -t "$IMAGE_URI" cloudtwin-poc
+
+  post_build:
+    commands:
+      - docker push "$IMAGE_URI"
+      - export CLOUDTWIN_IMAGE_URI="$IMAGE_URI"
+      - python deployment/deploy_cloudtwin.py
