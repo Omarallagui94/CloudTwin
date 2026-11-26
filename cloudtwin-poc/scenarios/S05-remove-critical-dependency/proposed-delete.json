@@ -1,0 +1,10 @@
+{
+  "apiVersion": "cloudtwin.io/v1alpha1",
+  "kind": "KubernetesDeleteIntent",
+  "operation": "delete",
+  "target": {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": {"name": "orders-postgresql", "namespace": "default"}
+  }
+}

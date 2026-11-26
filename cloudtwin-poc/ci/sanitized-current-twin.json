@@ -1,0 +1,32 @@
+{
+  "metadata": {
+    "fixture": true,
+    "schema": "cloudtwin-current-twin-v1",
+    "source": "sanitized-ci-baseline",
+    "notice": "Canonical CI baseline only; not a live AWS snapshot"
+  },
+  "resources": [
+    {
+      "id": "k8s:deployment:retail-store:ui",
+      "name": "ui",
+      "type": "DEPLOYMENT",
+      "provider": "kubernetes",
+      "properties": {"namespace": "retail-store", "replicas": 1, "ready_replicas": 1}
+    },
+    {
+      "id": "k8s:service:retail-store:ui",
+      "name": "ui",
+      "type": "SERVICE",
+      "provider": "kubernetes",
+      "properties": {"namespace": "retail-store", "service_type": "ClusterIP"}
+    }
+  ],
+  "relationships": [
+    {
+      "source": "k8s:service:retail-store:ui",
+      "target": "k8s:deployment:retail-store:ui",
+      "type": "EXPOSES"
+    }
+  ],
+  "summary": {"aws_resources": 0, "kubernetes_resources": 2, "relationships": 1}
+}

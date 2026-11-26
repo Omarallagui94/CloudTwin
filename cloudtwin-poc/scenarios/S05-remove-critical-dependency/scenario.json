@@ -1,0 +1,11 @@
+{
+  "scenario_id": "S05",
+  "name": "Remove critical dependency",
+  "description": "Remove the Orders PostgreSQL Service that routes the Orders workload to its database.",
+  "target_resource": "k8s:service:default:orders-postgresql",
+  "resource_type": "SERVICE",
+  "operation": "delete",
+  "property": "resource",
+  "before": "present",
+  "after": "absent"
+}

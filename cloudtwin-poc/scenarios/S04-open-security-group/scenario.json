@@ -1,0 +1,11 @@
+{
+  "scenario_id": "S04",
+  "name": "Open security group",
+  "description": "Add public TCP ingress to a synthetic Orders PostgreSQL security group on port 5432.",
+  "target_resource": "aws:security-group:sg-fixture-orders-db",
+  "resource_type": "SECURITY_GROUP",
+  "operation": "update",
+  "property": "ingress_rules",
+  "before": [{"protocol": "tcp", "from_port": 5432, "to_port": 5432, "cidr_blocks": ["10.0.0.0/16"]}],
+  "after": [{"protocol": "tcp", "from_port": 5432, "to_port": 5432, "cidr_blocks": ["10.0.0.0/16", "0.0.0.0/0"]}]
+}

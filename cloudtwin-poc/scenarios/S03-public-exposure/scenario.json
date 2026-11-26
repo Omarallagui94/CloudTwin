@@ -1,0 +1,11 @@
+{
+  "scenario_id": "S03",
+  "name": "Public exposure",
+  "description": "Change the UI Service from an internal ClusterIP to an internet-facing AWS LoadBalancer Service.",
+  "target_resource": "k8s:service:default:ui",
+  "resource_type": "SERVICE",
+  "operation": "update",
+  "property": "service_type_and_scheme",
+  "before": {"service_type": "ClusterIP", "scheme": "internal"},
+  "after": {"service_type": "LoadBalancer", "scheme": "internet-facing"}
+}

@@ -32,13 +32,14 @@ module "retail_app_eks" {
     helm = helm
   }
 
-  environment_name      = var.environment_name
-  cluster_version       = "1.33"
-  vpc_id                = module.vpc.inner.vpc_id
-  vpc_cidr              = module.vpc.inner.vpc_cidr_block
-  subnet_ids            = module.vpc.inner.private_subnets
-  opentelemetry_enabled = var.opentelemetry_enabled
-  tags                  = module.tags.result
+  environment_name             = var.environment_name
+  cluster_version              = "1.33"
+  cloudtwin_collector_role_arn = var.collector_security_enabled ? aws_iam_role.cloudtwin_collector[0].arn : null
+  vpc_id                       = module.vpc.inner.vpc_id
+  vpc_cidr                     = module.vpc.inner.vpc_cidr_block
+  subnet_ids                   = module.vpc.inner.private_subnets
+  opentelemetry_enabled        = var.opentelemetry_enabled
+  tags                         = module.tags.result
 
   istio_enabled = var.istio_enabled
 }

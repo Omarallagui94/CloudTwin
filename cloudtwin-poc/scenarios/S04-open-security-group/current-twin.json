@@ -1,0 +1,11 @@
+{
+  "metadata": {"fixture": true, "schema": "cloudtwin-current-twin-v1", "source": "sanitized-local"},
+  "resources": [
+    {"id": "aws:security-group:sg-fixture-orders-db", "name": "orders-database", "type": "SECURITY_GROUP", "provider": "aws", "properties": {"group_id": "sg-fixture-orders-db", "name": "orders-database", "description": "Synthetic Orders database security group", "vpc_id": "vpc-fixture", "ingress_rule_count": 1, "egress_rule_count": 1, "tags": {"Fixture": "true"}}},
+    {"id": "k8s:statefulset:default:orders-postgresql", "name": "orders-postgresql", "type": "STATEFUL_SET", "provider": "kubernetes", "properties": {"namespace": "default", "replicas": 1}}
+  ],
+  "relationships": [
+    {"source": "k8s:statefulset:default:orders-postgresql", "target": "aws:security-group:sg-fixture-orders-db", "type": "USES"}
+  ],
+  "summary": {"aws_resources": 1, "kubernetes_resources": 1, "relationships": 1}
+}

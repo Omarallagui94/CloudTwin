@@ -10,6 +10,13 @@ module "eks_cluster" {
   cluster_version                = var.cluster_version
   cluster_endpoint_public_access = true
 
+  manage_aws_auth_configmap = var.cloudtwin_collector_role_arn != null
+  aws_auth_roles = var.cloudtwin_collector_role_arn == null ? [] : [{
+    rolearn  = var.cloudtwin_collector_role_arn
+    username = "cloudtwin-collector"
+    groups   = ["cloudtwin-rbac-readers"]
+  }]
+
   cluster_addons = {
     vpc-cni = {
       before_compute = true

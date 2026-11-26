@@ -99,4 +99,3 @@ class ChangeSet:
 
     def __iter__(self):
         return iter(self.changes)
-

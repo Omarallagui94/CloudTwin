@@ -44,9 +44,16 @@ class ScenarioIngester:
         scenario_id = data["scenario_id"]
         scenario_name = data.get("name", "Unnamed Scenario")
         raw_type = data["resource_type"]
-        resource_name = data["resource"]
+        # Omar's maintained S01-S05 pack uses a canonical target_resource and
+        # flat change fields. Hamdi's original nested shape remains accepted at
+        # this ingestion boundary for backwards-compatible local fixtures.
+        resource_name = data.get("target_resource", data.get("resource"))
         raw_namespace = data.get("namespace", "default")
-        change_data = data["change"]
+        change_data = data.get("change") or {
+            "property": data.get("property"),
+            "before": data.get("before"),
+            "after": data.get("after"),
+        }
         raw_property = change_data["property"]
         before_val = change_data.get("before")
         after_val = change_data.get("after")
@@ -140,15 +147,21 @@ class ScenarioIngester:
 
     @staticmethod
     def _validate_scenario_structure(data: dict[str, Any]) -> None:
-        required_fields = ["scenario_id", "resource_type", "resource", "change"]
+        required_fields = ["scenario_id", "resource_type"]
         missing = [f for f in required_fields if f not in data]
         if missing:
             raise InvalidChangeInputError(f"Scenario missing required field(s): {missing}")
 
-        change = data.get("change")
+        if not data.get("target_resource") and not data.get("resource"):
+            raise InvalidChangeInputError("Scenario requires 'target_resource' or 'resource'")
+
+        change = data.get("change") or {
+            "property": data.get("property"),
+            "before": data.get("before"),
+            "after": data.get("after"),
+        }
         if not isinstance(change, dict):
             raise InvalidChangeInputError("'change' field must be an object")
 
         if "property" not in change or not change["property"]:
             raise InvalidChangeInputError("'change.property' must be a non-empty string")
-
