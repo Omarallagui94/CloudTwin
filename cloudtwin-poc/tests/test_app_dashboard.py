@@ -209,6 +209,12 @@ def test_live_discovery_errors_are_explained_not_raised():
     assert "identifiant" in cause and "aws configure" in action
     cause, action = dashboard.explain_discovery_error(ConfigException("Invalid kube-config file."))
     assert "kubeconfig" in cause and "update-kubeconfig" in action
+    from botocore.exceptions import ClientError
+    refused = ClientError({"Error": {"Code": "InvalidClientTokenId",
+                                     "Message": "The security token included in the request is invalid"}},
+                          "GetCallerIdentity")
+    cause, action = dashboard.explain_discovery_error(refused)
+    assert "refusés" in cause and "aws sts get-caller-identity" in action
     cause, _ = dashboard.explain_discovery_error(
         EndpointConnectionError(endpoint_url="https://sts.eu-west-3.amazonaws.com"))
     assert "ne répond pas" in cause

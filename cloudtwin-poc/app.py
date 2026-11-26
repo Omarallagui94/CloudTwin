@@ -319,6 +319,12 @@ def explain_discovery_error(exc: BaseException) -> tuple[str, str]:
     if name in {"NoCredentialsError", "PartialCredentialsError"} or "unable to locate credentials" in lowered:
         return ("Aucun identifiant AWS n'est configuré sur cette machine.",
                 "Configure le compte de lecture du collecteur : `aws configure` (ou la variable AWS_PROFILE).")
+    if "invalidclienttokenid" in lowered or "unrecognizedclientexception" in lowered \
+            or "signaturedoesnotmatch" in lowered:
+        return ("Les identifiants AWS configurés sur cette machine sont refusés (clé supprimée, désactivée "
+                "ou d'un autre compte).",
+                "Demande de nouvelles clés au responsable du labo (Omar), puis `aws configure --profile cloudtwin` "
+                "et `export AWS_PROFILE=cloudtwin`. Vérifie avec `aws sts get-caller-identity`.")
     if "expiredtoken" in lowered or ("expired" in lowered and "token" in lowered):
         return ("Les identifiants AWS ont expiré.", "Renouvelle la session : `aws sso login` ou de nouvelles clés.")
     if "accessdenied" in lowered or "not authorized" in lowered or "unauthorizedoperation" in lowered:
