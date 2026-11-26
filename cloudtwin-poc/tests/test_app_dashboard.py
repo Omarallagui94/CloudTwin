@@ -185,3 +185,30 @@ def test_llm_toggle_waits_for_click_and_falls_back_without_ollama():
     # Pas de serveur Ollama ici : le rapport sort quand même, avec le texte de secours.
     assert any(m.value.startswith("> Ce changement obtient 30/100") for m in app.markdown)
     assert any("30 → **0/100**" in m.value for m in app.markdown)
+
+
+# ------------------------------------------------------------- Infrastructure
+
+def test_infrastructure_shows_the_reference_lab_without_any_change():
+    app = AppTest.from_file(APP_PATH, default_timeout=30).run()
+    app.radio[0].set_value("Infrastructure").run()
+    assert not app.exception
+    assert any(m.label == "Resources" for m in app.metric) or any(
+        "40</div>" in m.value for m in app.markdown)
+    assert app.dataframe, "l'inventaire s'affiche sans changement proposé"
+    assert any("Infrastructure de référence du labo" in c.value for c in app.caption)
+
+
+def test_live_discovery_errors_are_explained_not_raised():
+    from botocore.exceptions import EndpointConnectionError, NoCredentialsError
+    from kubernetes.config import ConfigException
+
+    import app as dashboard
+
+    cause, action = dashboard.explain_discovery_error(NoCredentialsError())
+    assert "identifiant" in cause and "aws configure" in action
+    cause, action = dashboard.explain_discovery_error(ConfigException("Invalid kube-config file."))
+    assert "kubeconfig" in cause and "update-kubeconfig" in action
+    cause, _ = dashboard.explain_discovery_error(
+        EndpointConnectionError(endpoint_url="https://sts.eu-west-3.amazonaws.com"))
+    assert "ne répond pas" in cause
